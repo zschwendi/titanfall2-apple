@@ -1,0 +1,249 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tfrecomp <tfrecomp@example.invalid>
+Date: Tue, 13 Oct 2026 04:00:49 -0400
+Subject: [PATCH 08/12] native: DXMT_MERGE_WHY=<N> prints why render passes
+ were not joined, every N command buffers
+
+For every pair of encoders that checkEncoderRelation is asked about with a render pass as the former,
+count what kept the former from joining or passing the latter: the test of isEncoderSignatureMatched
+that failed, a wait of the latter's vertex stage, or the kind of the pass in between that depends on
+it.  A render pass now also records whether a shader of it reads the texture of its own depth-stencil
+attachment (RenderEncoderData::samples_own_depth), so that a read-only depth view that is read can be
+told from one that is not.  No behaviour changes; nothing is printed when the variable is unset.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/d3d11/d3d11_context_impl.cpp |   2 +
+ src/dxmt/dxmt_context.cpp        | 121 +++++++++++++++++++++++++++++++
+ src/dxmt/dxmt_context.hpp        |  19 +++++
+ 3 files changed, 142 insertions(+)
+
+diff --git a/src/d3d11/d3d11_context_impl.cpp b/src/d3d11/d3d11_context_impl.cpp
+index c3db7c2..f411157 100644
+--- a/src/d3d11/d3d11_context_impl.cpp
++++ b/src/d3d11/d3d11_context_impl.cpp
+@@ -4561,6 +4561,8 @@ public:
+         info.render_target_width = render_target_width;
+         info.render_target_array_length = render_target_array;
+         info.tile_barrier_pso_key.raster_sample_count = sample_count;
++        /* registering the stencil plane read the depth plane's texture: that is no shader read */
++        info.samples_own_depth = false;
+       });
+     }
+ 
+diff --git a/src/dxmt/dxmt_context.cpp b/src/dxmt/dxmt_context.cpp
+index 7b29f1e..17b359b 100644
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -29,6 +29,10 @@
+ 
+ namespace dxmt {
+ 
++namespace {
++void mw_tick(); /* DXMT_MERGE_WHY, below */
++}
++
+ ArgumentEncodingContext::ArgumentEncodingContext(CommandQueue &queue, WMT::Device device, InternalCommandLibrary &lib) :
+     device_(device),
+     lib(lib),
+@@ -879,6 +883,7 @@ ArgumentEncodingContext::flushCommands(WMT::CommandBuffer cmdbuf, uint64_t seqId
+     assert(encoder_index == encoder_count);
+   }
+ 
++  mw_tick();
+   if (encoder_count > 1) {
+     unsigned j, i;
+     for (j = encoder_count - 2; j != ~0u; j--) {
+@@ -1272,6 +1277,104 @@ ArgumentEncodingContext::flushCommands(WMT::CommandBuffer cmdbuf, uint64_t seqId
+   return readbacks;
+ }
+ 
++/* DXMT_MERGE_WHY=<N>: why render passes stay apart.  Counts, for every pair of encoders that
++   checkEncoderRelation is asked about with a render pass as the former, what stopped the former
++   from joining or passing the latter, and prints the counts every N command buffers. */
++namespace {
++enum {
++  MW_MERGED, MW_PASSED, MW_RT_COUNT, MW_PLANAR, MW_READONLY, MW_READONLY_UNREAD, MW_ARRAY, MW_ARGBUF, MW_DEPTH_ATT, MW_DEPTH_RO_CLEAR,
++  MW_DEPTH_STORE, MW_DEPTH_LOAD, MW_STENCIL, MW_COLOR_ATT, MW_COLOR_PLANE, MW_COLOR_STORE, MW_COLOR_LOAD,
++  MW_VERTEX_WAITS, MW_DEP_RENDER, MW_DEP_COMPUTE, MW_DEP_BLIT, MW_DEP_CLEAR, MW_DEP_OTHER, MW_SYNC_EVENT, MW_COUNT
++};
++const char *const mw_names[MW_COUNT] = {
++  "merged", "passed (independent)", "render target count", "depth/stencil planes", "read-only depth view whose texture a shader reads",
++  "read-only depth view, texture not read by a shader",
++  "array length", "argument buffer", "depth attachment", "read-only depth then clear", "depth store action",
++  "depth load action", "stencil", "colour attachment", "colour depth plane", "colour store action",
++  "colour load action", "latter's vertex stage waits for former", "dependency on a render pass of other targets",
++  "dependency on a compute pass", "dependency on a blit pass", "dependency on a clear", "dependency on another kind",
++  "event or timestamp"
++};
++uint64_t mw_count[MW_COUNT];
++int mw_every = -1;
++uint64_t mw_buffers;
++
++int
++mw_on() {
++  if (mw_every < 0) {
++    const char *e = getenv("DXMT_MERGE_WHY");
++    int n = e ? atoi(e) : 0;
++    mw_every = n > 0 ? n : 0;
++  }
++  return mw_every;
++}
++
++void
++mw_tick() {
++  if (!mw_on() || ++mw_buffers % (uint64_t)mw_every)
++    return;
++  fprintf(stderr, "MERGE-WHY command buffers %d:", mw_every);
++  for (int i = 0; i < MW_COUNT; i++)
++    if (mw_count[i])
++      fprintf(stderr, " [%s] %.2f", mw_names[i], (double)mw_count[i] / mw_every);
++  fprintf(stderr, " (per command buffer)\n");
++  memset(mw_count, 0, sizeof mw_count);
++}
++
++int
++mw_signature(RenderEncoderData *r0, RenderEncoderData *r1) {
++  if (r0->render_target_count != r1->render_target_count)
++    return MW_RT_COUNT;
++  if (r0->dsv_planar_flags != r1->dsv_planar_flags)
++    return MW_PLANAR;
++  if (r0->dsv_readonly_flags != r1->dsv_readonly_flags)
++    return r0->samples_own_depth || r1->samples_own_depth ? MW_READONLY : MW_READONLY_UNREAD;
++  if (r0->render_target_array_length != r1->render_target_array_length)
++    return MW_ARRAY;
++  if (r0->dsv_planar_flags & 1) {
++    if (r0->depth.attachment != r1->depth.attachment)
++      return MW_DEPTH_ATT;
++  }
++  for (unsigned i = 0; i < r0->render_target_count; i++) {
++    if (r0->colors[i].attachment != r1->colors[i].attachment)
++      return MW_COLOR_ATT;
++    if (r0->colors[i].depth_plane != r1->colors[i].depth_plane)
++      return MW_COLOR_PLANE;
++  }
++  if (r0->allocated_argbuf != r1->allocated_argbuf)
++    return MW_ARGBUF;
++  if (r0->dsv_planar_flags & 1) {
++    if (r0->dsv_readonly_flags & 1) {
++      if (r1->depth.load_action == WMTLoadActionClear)
++        return MW_DEPTH_RO_CLEAR;
++    } else {
++      if (r0->depth.store_action != WMTStoreActionStore)
++        return MW_DEPTH_STORE;
++      if (r1->depth.load_action != WMTLoadActionLoad)
++        return MW_DEPTH_LOAD;
++    }
++  }
++  if (r0->dsv_planar_flags & 2) {
++    if (r0->stencil.attachment != r1->stencil.attachment)
++      return MW_STENCIL;
++    if (r0->dsv_readonly_flags & 2) {
++      if (r1->stencil.load_action == WMTLoadActionClear)
++        return MW_STENCIL;
++    } else if (r0->stencil.store_action != WMTStoreActionStore || r1->stencil.load_action != WMTLoadActionLoad)
++      return MW_STENCIL;
++  }
++  for (unsigned i = 0; i < r0->render_target_count; i++) {
++    if (!r0->colors[i].attachment)
++      continue;
++    if (r0->colors[i].store_action != WMTStoreActionStore)
++      return MW_COLOR_STORE;
++    if (r1->colors[i].load_action != WMTLoadActionLoad)
++      return MW_COLOR_LOAD;
++  }
++  return MW_MERGED;
++}
++} // namespace
++
+ DXMT_ENCODER_LIST_OP
+ ArgumentEncodingContext::checkEncoderRelation(EncoderData *former, EncoderData *latter) {
+ 
+@@ -1372,6 +1475,14 @@ ArgumentEncodingContext::checkEncoderRelation(EncoderData *former, EncoderData *
+         return DXMT_ENCODER_LIST_OP_SWAP; // carry on (RENDER -> RESOLVE -> RESOLVE -> ...)
+       }
+     }
++    if (mw_on() && former->type == EncoderType::Render) {
++      bool dep = hasDataDependency(latter, former);
++      mw_count[!dep ? MW_PASSED
++               : latter->type == EncoderType::Compute ? MW_DEP_COMPUTE
++               : latter->type == EncoderType::Blit ? MW_DEP_BLIT
++               : latter->type == EncoderType::Clear ? MW_DEP_CLEAR
++               : MW_DEP_OTHER]++;
++    }
+     return hasDataDependency(latter, former) ? DXMT_ENCODER_LIST_OP_SYNCHRONIZE : DXMT_ENCODER_LIST_OP_SWAP;
+   }
+ 
+@@ -1379,6 +1490,15 @@ ArgumentEncodingContext::checkEncoderRelation(EncoderData *former, EncoderData *
+     auto r1 = reinterpret_cast<RenderEncoderData *>(latter);
+     auto r0 = reinterpret_cast<RenderEncoderData *>(former);
+ 
++    if (mw_on()) {
++      int why = mw_signature(r0, r1);
++      if (why == MW_MERGED && r1->fence_wait_vertex.intersectedWith(r0->fence_update))
++        why = MW_VERTEX_WAITS;
++      if (why != MW_MERGED && why != MW_VERTEX_WAITS && !hasDataDependency(latter, former))
++        why = MW_PASSED;
++      mw_count[why]++;
++    }
++
+     if (isEncoderSignatureMatched(r0, r1) &&
+         // can't merge if latter's vertex wait for former's fragment
+         !r1->fence_wait_vertex.intersectedWith(r0->fence_update)) {
+@@ -1418,6 +1538,7 @@ ArgumentEncodingContext::checkEncoderRelation(EncoderData *former, EncoderData *
+       r1->gs_arg_marshal_tasks = std::move(r0->gs_arg_marshal_tasks);
+       r1->ts_arg_marshal_tasks = std::move(r0->ts_arg_marshal_tasks);
+       r1->use_visibility_result = r0->use_visibility_result || r1->use_visibility_result;
++      r1->samples_own_depth = r0->samples_own_depth || r1->samples_own_depth;
+ 
+       r1->fence_update.merge(r0->fence_update);
+       r1->fence_wait.merge(r0->fence_wait);
+diff --git a/src/dxmt/dxmt_context.hpp b/src/dxmt/dxmt_context.hpp
+index eabe872..272cd51 100644
+--- a/src/dxmt/dxmt_context.hpp
++++ b/src/dxmt/dxmt_context.hpp
+@@ -208,6 +208,9 @@ struct RenderEncoderData : EncoderData {
+   bool use_tessellation = 0;
+   bool use_geometry = 0;
+   bool use_emulated_so = 0;
++  /* a shader of this pass reads the texture of its own depth-stencil attachment (which then has
++     to be a read-only view): such a pass cannot join one that writes the attachment */
++  bool samples_own_depth = 0;
+   TileBarrierPSOKey tile_barrier_pso_key = {};
+   WMT::RenderPipelineState last_pso = {};
+ };
+@@ -365,11 +368,25 @@ public:
+     return {view, allocation->currentSuballocationOffset(view.suballocation_texel)};
+   }
+ 
++  /* A read, in a stage of a render pass, of a texture: note it if the texture is the pass's own
++     depth-stencil attachment (RenderEncoderData::samples_own_depth). */
++  void
++  noteOwnDepthRead(TextureAllocation *allocation) {
++    if (!encoder_current || encoder_current->type != EncoderType::Render)
++      return;
++    auto render = static_cast<RenderEncoderData *>(encoder_current);
++    if ((render->depth.attachment && render->depth.attachment->allocation == allocation) ||
++        (render->stencil.attachment && render->stencil.attachment->allocation == allocation))
++      render->samples_own_depth = true;
++  }
++
+   template<PipelineStage stage = PipelineStage::Compute>
+   WMT::Texture
+   access(Rc<Texture> const &texture, unsigned level, unsigned slice, int flags) {
+     auto allocation = texture->current();
+     retainAllocation(allocation);
++    if (stage != PipelineStage::Compute && !(flags & ResourceAccess::Write))
++      noteOwnDepthRead(&*allocation);
+     if (!allocation->flags().test(TextureAllocationFlag::GpuReadonly)) {
+       if (likely(allocation->flags().test(TextureAllocationFlag::ShaderReadonly))) {
+         track<stage>(allocation->fenceTrackers[0], flags);
+@@ -387,6 +404,8 @@ public:
+     assert(viewId);
+     auto allocation = texture->current();
+     retainAllocation(allocation);
++    if (stage != PipelineStage::Compute && !(flags & ResourceAccess::Write))
++      noteOwnDepthRead(&*allocation);
+     auto &view = texture->view(viewId, allocation);
+     if (!allocation->flags().test(TextureAllocationFlag::GpuReadonly)) {
+       if (likely(allocation->flags().test(TextureAllocationFlag::ShaderReadonly))) {

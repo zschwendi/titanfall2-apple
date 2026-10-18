@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tfrecomp <tfrecomp@example.invalid>
+Date: Fri, 9 Oct 2026 07:24:28 -0400
+Subject: [PATCH 03/12] native: no warning per Present() for the missing frame
+ latency semaphore
+
+There are no Win32 semaphores in a native build: CreateSemaphore() is a
+stub that returns null, so the swap chain's frame latency semaphore is
+null and IDXGISwapChain2::GetFrameLatencyWaitableObject() returns null.
+The swap chain still calls ReleaseSemaphore() on it for every Present(),
+and the stub logged a warning each time: one line per frame on stderr
+and in the log file.  Keep the warning for a non-null handle only.
+---
+ src/util/util_win32_compat.h | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/util/util_win32_compat.h b/src/util/util_win32_compat.h
+index e4a556a..a14ff80 100644
+--- a/src/util/util_win32_compat.h
++++ b/src/util/util_win32_compat.h
+@@ -78,7 +78,10 @@ inline HANDLE CreateSemaphore(LPSECURITY_ATTRIBUTES lpSemaphoreAttributes,
+ inline BOOL ReleaseSemaphore(HANDLE hSemaphore,
+                              LONG   lReleaseCount,
+                              LPLONG lpPreviousCount) {
+-  dxmt::Logger::warn("ReleaseSemaphore not implemented.");
++  // A swap chain releases its frame latency semaphore on every Present().
++  // CreateSemaphore() above gives it a null one: do not warn once per frame.
++  if (hSemaphore)
++    dxmt::Logger::warn("ReleaseSemaphore not implemented.");
+   return FALSE;
+ }
+ 

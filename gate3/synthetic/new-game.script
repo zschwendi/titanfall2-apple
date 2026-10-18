@@ -1,0 +1,21 @@
+# SYNTHETIC INPUT: nothing here is from the recording and nothing is the owner's input.
+# Written by unit gate3-run-10 under the planner's decision for that unit: scripted clicks
+# the recording does not have, only to start a new campaign game, only on items the UI probe
+# has named and placed (docs/handoff/gate3-run-10.md, sections 1 and 2).
+#
+#   GATE3_INPUT_SCRIPT=gate3/synthetic/new-game.script build/gate3/gate3 run
+#
+# Points are screen points: the window's client coordinates plus its origin (5, 28).
+# Times are milliseconds after the anchor fired.
+#
+# THE ANCHOR is the menu itself since unit gate3-run-13: until then it was `present 800`, a
+# Present count, which a slow start reached before the menu was up (gate3-run-12, entry 2:
+# one miss in 16 runs).
+
+anchor mark main-menu          # the UI's script opened menu_MainMenu (gate3/run.c, THE MENU MARK)
+
+# Click 1: MainMenuPanel/ButtonRow0x0, label #MENU_NEW_GAME, client rectangle 296,499 149x100,
+# centre (370, 549).
+3000 moveto 375 577
+3400 button left down
+3480 button left up

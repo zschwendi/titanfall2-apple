@@ -1,0 +1,5 @@
+# ---- virt.cpp: vtables, virtual calls, multiple inheritance, member pointers ------------------
+virt       shapes             virtual i32   i32  i32  i32
+virt       pick               virtual i32   u32  i32  i32
+virt       multi              virtual i32   i32
+virt       member_ptr         virtual i32   u32  i32

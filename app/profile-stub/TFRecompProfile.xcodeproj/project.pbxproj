@@ -1,0 +1,141 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA0000000000000000000001 /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* main.c */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000000002 /* main.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
+		AA0000000000000000000003 /* TFRecompProfile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TFRecompProfile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000004 /* TFRecompProfile-free.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TFRecompProfile-free.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		AA0000000000000000000005 = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000002 /* main.c */,
+				AA0000000000000000000004 /* TFRecompProfile-free.entitlements */,
+				AA0000000000000000000006 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000006 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000003 /* TFRecompProfile.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA0000000000000000000007 /* TFRecompProfile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA000000000000000000000C /* Build configuration list for PBXNativeTarget "TFRecompProfile" */;
+			buildPhases = (
+				AA0000000000000000000008 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TFRecompProfile;
+			productName = TFRecompProfile;
+			productReference = AA0000000000000000000003 /* TFRecompProfile.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA0000000000000000000009 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 2700;
+			};
+			buildConfigurationList = AA000000000000000000000B /* Build configuration list for PBXProject "TFRecompProfile" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA0000000000000000000005;
+			productRefGroup = AA0000000000000000000006 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA0000000000000000000007 /* TFRecompProfile */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA0000000000000000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000001 /* main.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AA000000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		AA000000000000000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = TFRecompProfile-free.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				GCC_OPTIMIZATION_LEVEL = 2;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = local.tfrecomp.player;
+				PRODUCT_NAME = TFRecompProfile;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA000000000000000000000B /* Build configuration list for PBXProject "TFRecompProfile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA000000000000000000000A /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AA000000000000000000000C /* Build configuration list for PBXNativeTarget "TFRecompProfile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA000000000000000000000D /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AA0000000000000000000009 /* Project object */;
+}

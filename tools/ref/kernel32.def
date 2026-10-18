@@ -1,0 +1,48 @@
+; The functions of kernel32.dll that tools/ref/refcalls.c calls.  `make ref-build` makes the
+; import library the program is linked against from this list (lld-link /lib /def:), because
+; this Mac has no Windows SDK.  A name added to refcalls.c's declarations is added here.
+LIBRARY kernel32.dll
+EXPORTS
+    AddVectoredExceptionHandler
+    CloseHandle
+    CreateFileA
+    CreateProcessA
+    CreateThread
+    CreateToolhelp32Snapshot
+    ExitProcess
+    GetCommandLineA
+    GetCurrentProcess
+    GetCurrentProcessId
+    GetCurrentThreadId
+    GetExitCodeProcess
+    GetExitCodeThread
+    GetLastError
+    GetModuleFileNameA
+    GetModuleHandleA
+    GetProcAddress
+    GetProcessHeap
+    GetStdHandle
+    GetSystemInfo
+    GetSystemTimeAsFileTime
+    GetTickCount
+    GetTimeZoneInformation
+    GetVersionExA
+    GlobalMemoryStatusEx
+    HeapAlloc
+    HeapFree
+    LoadLibraryExA
+    QueryPerformanceCounter
+    QueryPerformanceFrequency
+    ReadFile
+    SetDllDirectoryA
+    SetEndOfFile
+    SetErrorMode
+    SetFilePointer
+    SetUnhandledExceptionFilter
+    Sleep
+    TerminateProcess
+    Thread32First
+    Thread32Next
+    TlsGetValue
+    WaitForSingleObject
+    WriteFile

@@ -1,0 +1,18 @@
+# The test-only library (runtime/tests/abi).  Same format as runtime/modules.def.  The test
+# program adds it to the runtime through RtConfig.extra_modules; librt.a does not contain it.
+system   rttest.dll
+
+# Lifted modules of the test program (the loader's tests; runtime/include/rt/test_pe.h).
+# The test corpus is a real DLL with real lifted code: its identity is read from the file.
+lifted   corpus_O1.dll  dll=tests/corpus/build/corpus_O1.dll module=corpus_O1
+# Three empty slots of 64 KB each: a test writes the DLL file itself before the runtime
+# starts (TEST_SETUP), and their "lifted code" is eight C functions per slot that the test
+# programs (runtime/tests/loader_fixtures.c).
+lifted   t_lift_a.dll   identity=unchecked size_of_image=0x10000
+lifted   t_lift_b.dll   identity=unchecked size_of_image=0x10000
+lifted   t_lift_c.dll   identity=unchecked size_of_image=0x10000
+# A fourth slot, 'd', shaped like the game's ui(11).dll (gate3/modules.def): a file name that
+# is not a C identifier, a directory of its own under the install root, and a late row
+# (rt/module.h, RT_MODDEF_LATE: its base is RT_IMAGE_LATE_BASE and it moves no other).
+# runtime/tests/core/modules.c (module_bases) and loader_late.c.
+lifted   t_ui(11).dll   identity=unchecked size_of_image=0x10000 module=t_lift_d dir=r2/paks/Win64 place=late

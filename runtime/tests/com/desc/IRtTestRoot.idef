@@ -1,0 +1,9 @@
+# Written by hand: a root interface (no base, no IUnknown, no uuid), the test of the generator's
+# root-chain rules (runtime/tests/core/com_roots.c).  Format: runtime/com/gen_desc.py.
+interface IRtTestRoot
+iid       none
+owner     rttest.dll
+header    rttest
+root
+  0  IRtTestRoot  UINT Value(void)
+  1  IRtTestRoot  void Stop(UINT x)                  # no body: a stop

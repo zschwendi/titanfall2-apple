@@ -1,0 +1,11 @@
+# Written by hand: the second interface of the test class (a second face of the same object).
+interface IRtTestCounter
+iid       7e57c0de-0003-4000-8000-00000000c0de
+owner     rttest.dll
+header    rttest
+inherits  IUnknown 00000000-0000-0000-c000-000000000046 3
+  0  IUnknown        HRESULT QueryInterface(REFIID riid, void **ppvObject)
+  1  IUnknown        ULONG AddRef(void)
+  2  IUnknown        ULONG Release(void)
+  3  IRtTestCounter  UINT Next(void)
+  4  IRtTestCounter  IRtTestShape *Shape(void)          # no body: a stop

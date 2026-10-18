@@ -1,0 +1,9 @@
+# SYNTHETIC INPUT: nothing here is from the recording and nothing is the owner's input.
+# Written by the planner on 12 October 2026: for a run that is started on a map directly
+# (`gate3 run -- ... +map <name>`), where no menu is clicked: only the one tap of the space
+# bar that the loading screen waits for (continue.script's second section, unchanged).
+# Times are milliseconds after the anchor fired.
+
+anchor mark mission-frame
+5000 key down 32
+5120 key up 32

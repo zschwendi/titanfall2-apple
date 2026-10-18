@@ -1,0 +1,35 @@
+# SYNTHETIC INPUT: nothing here is from the recording and nothing is the owner's input.
+# Written by the planner on 12 October 2026 (NOTES.md, 09:0x): the player switches to another
+# application during play and comes back (the host window stops being the key window, then
+# is it again), twice, with a key held across the first.  Found by a hidden run, not by him:
+# what the game does when Windows tells it that it is no longer in front.
+#
+#   GATE3_INPUT_SCRIPT=gate3/synthetic/away.script build/gate3/gate3 run
+#
+# The first two sections are continue.script's, unchanged.  Times are milliseconds after the
+# anchor fired.
+
+anchor mark main-menu
+3000 moveto 375 577
+3400 button left down
+3480 button left up
+
+anchor mark mission-frame
+5000 key down 32
+5120 key up 32
+
+# 20 s into play: W held, the window loses the foreground for 3 s, comes back, W released.
+20000 key down 87
+20500 active off
+23500 active on
+24000 key up 87
+
+# A second, short absence, then a right click and a double tap as proof that input lives.
+26000 active off
+26300 active on
+28000 button right down
+28300 button right up
+29000 button left down
+29080 button left up
+29200 button left down
+29280 button left up

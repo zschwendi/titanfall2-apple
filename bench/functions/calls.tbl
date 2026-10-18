@@ -1,0 +1,12 @@
+# ---- calls.c: recursion, many arguments, function pointers, tail calls, variadics ------------
+calls      fib                call    u32   u32
+calls      ackermann          call    u32   u32  u32
+calls      call_many          call    i64   i64
+calls      dispatch           virtual i32   u32  i32  i32
+calls      fold               virtual i32   buf=64  u32  u32
+calls      tail_caller        call    i32   i32  i32
+calls      sum_va             call    i64   u32  ...  i64  i64  i64  i64  i64  i64  i64
+calls      call_va            call    i64   i64
+calls      big_frame          mem     u32   u32
+calls      mutual_even        call    i32   u32
+calls      callback_walk      virtual i64   buf=32  u32  cb0  u64

@@ -1,0 +1,27 @@
+0 . D3D11CreateDevice =0 n i1 i0 i0 n i0 i7 >o1 >I4[45056] >o2
+1 . ID3D11Device::CreateSamplerState =0 o1 sD3D11_SAMPLER_DESC{Filter=0,AddressU=3,AddressV=3,AddressW=3,MipLODBias=0,MaxAnisotropy=1,ComparisonFunc=8,BorderColor[0]=0,BorderColor[1]=0,BorderColor[2]=0,BorderColor[3]=0,MinLOD=0,MaxLOD=3.402823e+38} >o8
+2 . ID3D11DeviceContext::VSSetSamplers - o2 i0 i1 O[8]
+3 . ID3D11DeviceContext::PSSetSamplers - o2 i0 i1 O[8]
+4 . ID3D11DeviceContext::GSSetSamplers - o2 i0 i1 O[8]
+5 . ID3D11DeviceContext::CSSetSamplers - o2 i0 i1 O[8]
+6 . ID3D11DeviceContext::VSSetSamplers - o2 i0 i1 O[0]
+7 . ID3D11DeviceContext::PSSetSamplers - o2 i0 i1 O[0]
+8 . ID3D11DeviceContext::GSSetSamplers - o2 i0 i1 O[0]
+9 . ID3D11DeviceContext::CSSetSamplers - o2 i0 i1 O[0]
+10 . ID3D11DeviceContext::VSSetShader - o2 n n i0
+11 . ID3D11DeviceContext::PSSetShader - o2 n n i0
+12 . ID3D11DeviceContext::GSSetShader - o2 n n i0
+13 . ID3D11DeviceContext::CSSetShader - o2 n n i0
+14 . ID3D11DeviceContext::HSSetShader - o2 n n i0
+15 . ID3D11DeviceContext::DSSetShader - o2 n n i0
+16 . ID3D11Device::CreateVertexShader =0 o1 I1[68,88,66,67,122,210,96,24,8,160,54,66,112,8,21,120,28,120,80,13,1,0,0,0,68,1,0,0,3,0,0,0,44,0,0,0,124,0,0,0,208,0,0,0,73,83,71,78,72,0,0,0,2,0,0,0,8,0,0,0,56,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,15,15,0,0,65,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,1,0,0,0,15,15,0,0,80,79,83,73,84,73,79,78,0,67,79,76,79,82,0,0,79,83,71,78,76,0,0,0,2,0,0,0,8,0,0,0,56,0,0,0,0,0,0,0,1,0,0,0,3,0,0,0,0,0,0,0,15,0,0,0,68,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,1,0,0,0,15,0,0,0,83,86,95,80,111,115,105,116,105,111,110,0,67,79,76,79,82,0,0,0,83,72,69,88,108,0,0,0,80,0,1,0,27,0,0,0,106,8,0,1,95,0,0,3,242,16,16,0,0,0,0,0,95,0,0,3,242,16,16,0,1,0,0,0,103,0,0,4,242,32,16,0,0,0,0,0,1,0,0,0,101,0,0,3,242,32,16,0,1,0,0,0,54,0,0,5,242,32,16,0,0,0,0,0,70,30,16,0,0,0,0,0,54,0,0,5,242,32,16,0,1,0,0,0,70,30,16,0,1,0,0,0,62,0,0,1] i324 n >o3
+17 . ID3D11DeviceContext::VSSetShader - o2 o3 n i0
+18 . ID3D11DeviceContext::VSSetShader - o2 n n i0
+19 . ID3D11Device::CreatePixelShader =0 o1 I1[68,88,66,67,139,96,107,58,21,181,48,202,43,178,129,55,108,7,234,133,1,0,0,0,248,0,0,0,3,0,0,0,44,0,0,0,128,0,0,0,180,0,0,0,73,83,71,78,76,0,0,0,2,0,0,0,8,0,0,0,56,0,0,0,0,0,0,0,1,0,0,0,3,0,0,0,0,0,0,0,15,0,0,0,68,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,1,0,0,0,15,15,0,0,83,86,95,80,111,115,105,116,105,111,110,0,67,79,76,79,82,0,0,0,79,83,71,78,44,0,0,0,1,0,0,0,8,0,0,0,32,0,0,0,0,0,0,0,64,0,0,0,3,0,0,0,0,0,0,0,15,0,0,0,83,86,95,84,97,114,103,101,116,0,0,0,83,72,69,88,60,0,0,0,80,0,0,0,15,0,0,0,106,8,0,1,98,16,0,3,242,16,16,0,1,0,0,0,101,0,0,3,242,32,16,0,0,0,0,0,54,0,0,5,242,32,16,0,0,0,0,0,70,30,16,0,1,0,0,0,62,0,0,1] i248 n >o4
+20 . ID3D11DeviceContext::PSSetShader - o2 o4 n i0
+21 . ID3D11DeviceContext::PSSetShader - o2 n n i0
+22 . ID3D11SamplerState::Release =0 o8
+23 . ID3D11PixelShader::Release =0 o4
+24 . ID3D11VertexShader::Release =0 o3
+25 . ID3D11DeviceContext::Release =0 o2
+26 . ID3D11Device::Release =0 o1

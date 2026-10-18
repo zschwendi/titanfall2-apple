@@ -1,0 +1,449 @@
+#!/usr/bin/env python3
+"""tfrecomp: check, set up, build, play and smoke-test the Titanfall 2 recompilation.
+
+Standard library only, so it runs before .venv exists. Every command runs its subprocesses with
+cwd set to the checkout root (the directory of this script). --dry-run prints the commands it
+would run and changes nothing.
+"""
+import argparse
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.realpath(__file__))
+APP_BUNDLE = os.path.join(ROOT, "build", "app", "TFRecomp.app")
+BUNDLE_PROGRAM = os.path.join(APP_BUNDLE, "Contents", "MacOS", "gate3")
+BUNDLE_FRAMEWORKS = os.path.join(APP_BUNDLE, "Contents", "Frameworks")
+DEFAULT_STATE = os.path.expanduser("~/Library/Application Support/tfrecomp/player")
+DXMT_URL = "https://github.com/3Shain/dxmt"
+DXMT_COMMIT = "e94c312f5c054263acf261cfa109edf13e757587"
+DISK_NEED_BYTES = 40 * 10**9
+VENV_PY = ".venv/bin/python"
+
+
+def die(msg, code=2):
+    sys.stderr.write(f"tfrecomp: {msg}\n")
+    sys.exit(code)
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        die(f"{self.prog}: {message}")
+
+
+def pos_int(text):
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a whole number: {text!r}")
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, not {value}")
+    return value
+
+
+SIGNING_LOCAL = os.path.join(ROOT, "app", "signing.local.mk")
+
+
+def signing_mode():
+    """dev (paid account), free (a free Apple ID's Personal Team) or adhoc (no account), from
+    TFRECOMP_SIGN or app/signing.local.mk (its APP_SIGN line; a file without one is dev)."""
+    value = os.environ.get("TFRECOMP_SIGN")
+    if value is not None:
+        if value not in ("dev", "free", "adhoc"):
+            die(f"TFRECOMP_SIGN must be dev, free or adhoc, not {value!r}")
+        return value
+    if not os.path.exists(SIGNING_LOCAL):
+        return "adhoc"
+    with open(SIGNING_LOCAL, encoding="utf-8") as f:
+        for line in f:
+            m = re.match(r"\s*APP_SIGN\s*:?=\s*(\S+)", line)
+            if m and m.group(1) in ("dev", "free", "adhoc"):
+                return m.group(1)
+    return "dev"
+
+
+def profile_expiry():
+    """The expiry of the profile app/signing.local.mk names (a datetime), or None if it cannot be read."""
+    path = None
+    try:
+        with open(SIGNING_LOCAL, encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r"\s*APP_PROFILE\s*:?=\s*(.+?)\s*$", line)
+                if m:
+                    path = m.group(1)
+    except OSError:
+        return None
+    if not path:
+        return None
+    rc, out = capture(["security", "cms", "-D", "-i", path if os.path.isabs(path) else os.path.join(ROOT, path)])
+    if rc != 0:
+        return None
+    import plistlib
+    try:
+        return plistlib.loads(out.encode()).get("ExpirationDate")
+    except Exception:
+        return None
+
+
+def print_mode(mode):
+    if mode == "dev":
+        print("signing: dev (hardware x86 memory ordering)")
+    elif mode == "free":
+        print("signing: free (a free Apple ID's Personal Team; hardware x86 memory ordering; untested so far)")
+    else:
+        print("signing: adhoc (no Apple account; software memory ordering, GUEST_MEM=tsob)")
+
+
+def capture(argv):
+    try:
+        result = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True)
+    except OSError:
+        return 1, ""
+    return result.returncode, result.stdout.strip()
+
+
+def run(argv, env_set=None, dry=False):
+    prefix = "".join(f"{k}={v} " for k, v in (env_set or {}).items())
+    print(f"run: {prefix}{' '.join(argv)}", flush=True)
+    if dry:
+        return 0
+    env = dict(os.environ)
+    env.update(env_set or {})
+    try:
+        rc = subprocess.run(argv, cwd=ROOT, env=env).returncode
+    except OSError as err:
+        print(f"tfrecomp: cannot run {argv[0]}: {err}", file=sys.stderr)
+        return 127
+    return rc if rc >= 0 else 128 - rc
+
+
+def step(argv, dry, label):
+    rc = run(argv, dry=dry)
+    if rc:
+        print(f"{label}: {' '.join(argv)} failed")
+    return rc
+
+
+def lifted_dlls():
+    """DLL paths (leading game/ kept) from the lifted lines of gate3/modules.def."""
+    paths = []
+    with open(os.path.join(ROOT, "gate3", "modules.def"), encoding="utf-8") as f:
+        for line in f:
+            if line.startswith("lifted "):
+                for tok in line.split():
+                    if tok.startswith("dll="):
+                        paths.append(tok[len("dll="):])
+    return paths
+
+
+def cmd_doctor(_args):
+    mode = signing_mode()
+    print_mode(mode)
+    counts = {"missing": 0, "required": False}
+
+    def report(name, ok, good, bad, hint, required=True):
+        if ok:
+            print(f"ok      {name}: {good}")
+            return
+        counts["missing"] += 1
+        if required:
+            counts["required"] = True
+        print(f"MISSING {name}: {bad}; {hint}")
+
+    machine = platform.machine()
+    report("arm64", machine == "arm64", machine, machine or "unknown machine",
+           "needs an Apple silicon Mac")
+    report("macos", True, platform.mac_ver()[0] or "not a macOS system", "", "")
+
+    rc, out = capture(["xcrun", "--find", "clang"])
+    report("clang", rc == 0, out, "xcrun cannot find clang", "run: xcode-select --install")
+
+    rc_metal, _ = capture(["xcrun", "-sdk", "macosx", "--find", "metal"])
+    rc_lib, _ = capture(["xcrun", "-sdk", "macosx", "--find", "metallib"])
+    ok = rc_metal == 0 and rc_lib == 0
+    report("metal", ok, "metal and metallib found", "metal or metallib not found",
+           "run: xcodebuild -downloadComponent MetalToolchain")
+
+    base = os.path.abspath(os.environ.get("DXMT_LLVM15") or "/opt/homebrew/opt/llvm@15")
+    rc, ver = capture([os.path.join(base, "bin", "llvm-config"), "--version"])
+    ok = rc == 0 and ver.startswith("15.") and os.path.isfile(
+        os.path.join(base, "lib", "libLLVMSupport.a"))
+    report("llvm15", ok, f"{ver} at {base}", f"no LLVM 15 at {base}",
+           "run: brew install llvm@15")
+
+    tools = [t for t in ("meson", "ninja", "xxd", "git") if shutil.which(t) is None]
+    report("tools", not tools, "meson, ninja, xxd, git on PATH",
+           "not on PATH: " + ", ".join(tools), "run: brew install meson ninja")
+
+    rc, _ = capture([os.path.join(ROOT, VENV_PY), "-c", "import capstone, unicorn"])
+    report("python", rc == 0, ".venv imports capstone and unicorn",
+           ".venv cannot import capstone and unicorn", "run: ./tfrecomp setup")
+
+    try:
+        dlls = lifted_dlls()
+    except OSError:
+        report("game", False, "", "gate3/modules.def unreadable", "restore that file")
+    else:
+        present = [d for d in dlls if os.path.isfile(os.path.join(ROOT, d))]
+        absent = [d for d in dlls if d not in present]
+        game_ok = os.path.exists(os.path.join(ROOT, "game")) and not absent
+        first = absent[0] if absent else "the game folder"
+        report("game", game_ok, f"{len(present)} of {len(dlls)} DLLs present",
+               f"{len(present)} of {len(dlls)} DLLs present; {len(absent)} missing, "
+               f"first missing {first}",
+               "run: ./tfrecomp setup --game <your Titanfall 2 folder>")
+
+    dxmt_ok = os.path.exists(os.path.join(ROOT, "third_party", "dxmt", ".git"))
+    report("dxmt", dxmt_ok, "third_party/dxmt is checked out",
+           "third_party/dxmt is not checked out", "run: ./tfrecomp setup")
+
+    if mode in ("dev", "free"):
+        rc, out = capture(["security", "find-identity", "-v", "-p", "codesigning"])
+        ok = rc == 0 and "Apple Development" in out
+        report("signing", ok, f"{mode}: Apple Development identity found",
+               f"{mode}: no Apple Development identity",
+               "sign in to your Apple account in Xcode, or use TFRECOMP_SIGN=adhoc")
+        expiry = profile_expiry()
+        if expiry is not None:
+            import datetime
+            left = expiry - datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+            report("profile", left.total_seconds() > 0, f"expires {expiry:%Y-%m-%d}",
+                   f"expired on {expiry:%Y-%m-%d}",
+                   "run: ./tfrecomp signing --team <TEAMID> --bundle-id <ID> (a free account's lasts 7 days)")
+    else:
+        report("signing", True, "adhoc: no Apple account; software memory ordering", "", "")
+
+    free = shutil.disk_usage(ROOT).free
+    report("disk", free >= DISK_NEED_BYTES, f"{free / 1e9:.1f} GB free",
+           f"{free / 1e9:.1f} GB free, need 40 GB", "free space on this volume")
+
+    report("built", os.path.isfile(BUNDLE_PROGRAM), "app bundle built",
+           "no app bundle yet", "run: ./tfrecomp build", required=False)
+
+    print(f"doctor: {counts['missing']} missing")
+    return 1 if counts["required"] else 0
+
+
+def cmd_setup(args):
+    dry = args.dry_run
+    try:
+        dlls = lifted_dlls()
+    except OSError:
+        die("cannot read gate3/modules.def")
+    if not dlls:
+        die("gate3/modules.def lists no lifted DLLs")
+    for d in dlls:
+        if not d.startswith("game/"):
+            die(f"gate3/modules.def path does not start with game/: {d}")
+
+    game_dir = os.path.abspath(os.path.expanduser(args.game))
+    if not os.path.isdir(game_dir):
+        die(f"--game {game_dir} is not a directory")
+    for d in dlls:
+        if not os.path.isfile(os.path.join(game_dir, d[len("game/"):])):
+            die(f"missing {d} under {game_dir} (first missing path)")
+
+    game_link = os.path.join(ROOT, "game")
+    if os.path.islink(game_link):
+        if os.path.realpath(game_link) == os.path.realpath(game_dir):
+            link = "same"
+        else:
+            die(f"game is a link to {os.readlink(game_link)}, not {game_dir}; changed nothing")
+    elif os.path.lexists(game_link):
+        die("game exists and is not a symlink; changed nothing (move it aside first)")
+    else:
+        link = "create"
+
+    if link == "same":
+        print(f"game already links to {game_dir}")
+    elif dry:
+        print(f"would link: game -> {game_dir}")
+    else:
+        os.symlink(game_dir, game_link)
+        print(f"linked: game -> {game_dir}")
+
+    rc, _ = capture([os.path.join(ROOT, VENV_PY), "-c", "import capstone, unicorn"])
+    if rc != 0:
+        if not os.path.exists(os.path.join(ROOT, ".venv")):
+            rc = step(["python3", "-m", "venv", ".venv"], dry, "setup")
+            if rc:
+                return rc
+        rc = step([VENV_PY, "-m", "pip", "install", "-r", "requirements.txt"], dry, "setup")
+        if rc:
+            return rc
+
+    if not os.path.exists(os.path.join(ROOT, "third_party", "dxmt", ".git")):
+        src = args.dxmt_source or DXMT_URL
+        if os.path.exists(src):
+            src = os.path.abspath(src)
+        for argv in (
+            ["git", "clone", src, "third_party/dxmt"],
+            ["git", "-C", "third_party/dxmt", "checkout", "-q", DXMT_COMMIT],
+            ["git", "-C", "third_party/dxmt", "submodule", "update", "--init", "--depth", "1",
+             "include/native/directx"],
+        ):
+            rc = step(argv, dry, "setup")
+            if rc:
+                return rc
+
+    print("setup: done; next: ./tfrecomp build")
+    return 0
+
+
+def cmd_build(args):
+    mode = signing_mode()
+    print_mode(mode)
+    jobs = args.jobs if args.jobs is not None else max(1, (os.cpu_count() or 2) // 2)
+    if mode in ("dev", "free"):
+        steps = [
+            ["sh", "tools/dxmt/load_probe.sh"],
+            ["make", "gate3-build", f"GATE3_JOBS={jobs}"],
+            ["make", "-f", "app/app.mk", "app-game"] + (["APP_SIGN=free"] if mode == "free" else []),
+        ]
+    else:
+        steps = [
+            ["sh", "tools/dxmt/load_probe.sh"],
+            ["make", "gate3-build", "GUEST_MEM=tsob", f"GATE3_JOBS={jobs}"],
+            ["make", "-f", "app/app.mk", "app-game", "APP_SIGN=adhoc"],
+        ]
+    for argv in steps:
+        rc = step(argv, args.dry_run, "build")
+        if rc:
+            return rc
+    print("build: done; next: ./tfrecomp play")
+    return 0
+
+
+def _float(text, flag):
+    try:
+        return float(text)
+    except ValueError:
+        die(f"{flag} {text!r}: not a number")
+
+
+def cmd_play(args):
+    mode = signing_mode()
+    print_mode(mode)
+
+    size = None
+    if args.size is not None:
+        m = re.fullmatch(r"([0-9]+)x([0-9]+)", args.size)
+        if not m:
+            die(f"--size {args.size!r}: want WxH, for example 2016x1260")
+        w, h = int(m.group(1)), int(m.group(2))
+        if not (640 <= w <= 8192 and 640 <= h <= 8192):
+            die(f"--size {args.size}: each side must be 640..8192")
+        size = f"{w}x{h}"
+
+    upscale = None
+    if args.upscale is not None:
+        v = _float(args.upscale, "--upscale")
+        if not 1.0 <= v <= 2.0:
+            die(f"--upscale {args.upscale}: must be a number from 1.0 to 2.0")
+        upscale = f"{round(v, 2):g}"     # gate3/run.c takes at most two decimals
+
+    volume = "0.4"
+    if args.volume is not None:
+        v = _float(args.volume, "--volume")
+        if not 0.0 <= v <= 1.0:
+            die(f"--volume {args.volume}: must be a number from 0 to 1")
+        volume = f"{v}"
+
+    if not os.path.isfile(BUNDLE_PROGRAM):
+        die("no app bundle at build/app/TFRecomp.app; run ./tfrecomp build")
+
+    state = os.path.abspath(os.path.expanduser(args.state)) if args.state else DEFAULT_STATE
+    print(f"state: {state}")
+    if not args.dry_run:
+        parent = os.path.dirname(state)
+        try:
+            os.makedirs(parent, exist_ok=True)
+        except OSError as err:
+            die(f"cannot create {parent}: {err}", 1)
+
+    hidden = args.window == "hidden"
+    env_set = {
+        "RT_TSO": "off" if mode == "adhoc" else "require",
+        "RT_D3D_BACKEND": "dxmt",
+        "RT_DXMT_DIR": BUNDLE_FRAMEWORKS,
+        "RT_HOST_WINDOW": "appkit-hidden" if hidden else "appkit-fullscreen",
+        "RT_HOST_SCREEN": "builtin",
+        "GATE3_WORKERS": "3",
+        "RT_D3D_PRESENT": "immediate",
+        "GATE3_CONSOLE": "0:fps_max 0",
+        "GATE3_SOUND": "on",
+        "RT_HOST_AUDIO": "none" if hidden else "coreaudio",
+        "RT_HOST_AUDIO_VOLUME": volume,
+        "GATE3_TIMEOUT": "14400",
+        "GATE3_START": f"player:{state}",
+    }
+    if size is not None:
+        env_set["GATE3_SIZE"] = size
+    if upscale is not None:
+        env_set["GATE3_UPSCALE"] = upscale
+    return run([BUNDLE_PROGRAM, "run"], env_set=env_set, dry=args.dry_run)
+
+
+def cmd_smoke(args):
+    mode = signing_mode()
+    print_mode(mode)
+    if not os.path.isfile(BUNDLE_PROGRAM):
+        die("no app bundle at build/app/TFRecomp.app; run ./tfrecomp build")
+    env_set = {
+        "SMOKE_TSO": "off" if mode == "adhoc" else "require",
+        "SMOKE_START": f"save:{DEFAULT_STATE}" if os.path.isdir(DEFAULT_STATE) else "new",
+    }
+    return run(["sh", "gate3/smoke_maps.sh", *args.maps], env_set=env_set, dry=args.dry_run)
+
+
+def cmd_signing(args):
+    argv = ["sh", "tools/signing/make_profile.sh", "--team", args.team, "--bundle-id", args.bundle_id]
+    if args.paid:
+        argv.append("--paid")
+    return run(argv, dry=args.dry_run)
+
+
+def main():
+    parser = Parser(prog="tfrecomp", description="Titanfall 2 recompilation: check, set up, build, play, smoke-test.")
+    sub = parser.add_subparsers(dest="command", required=True, parser_class=Parser)
+
+    sub.add_parser("doctor", help="check the machine and the checkout")
+
+    p = sub.add_parser("setup", help="link the game, create .venv, fetch DXMT")
+    p.add_argument("--game", required=True, metavar="DIR", help="your Titanfall 2 folder")
+    p.add_argument("--dxmt-source", metavar="URL_OR_PATH", help="DXMT repository to clone")
+    p.add_argument("--dry-run", action="store_true")
+
+    p = sub.add_parser("signing", help="get a profile for the x86 ordering mode from your Apple ID (free by default)")
+    p.add_argument("--team", required=True, metavar="TEAMID", help="your team id (a free Apple ID's Personal Team)")
+    p.add_argument("--bundle-id", required=True, metavar="ID", help="a bundle id of your own, e.g. com.yourname.tfrecomp")
+    p.add_argument("--paid", action="store_true", help="a paid Apple Developer Program team (the managed entitlement)")
+    p.add_argument("--dry-run", action="store_true")
+
+    p = sub.add_parser("build", help="build DXMT, the lifted modules and the app bundle")
+    p.add_argument("--jobs", type=pos_int, metavar="N", help="parallel jobs (default: half the CPUs)")
+    p.add_argument("--dry-run", action="store_true")
+
+    p = sub.add_parser("play", help="run the game from the app bundle")
+    p.add_argument("--size", metavar="WxH", help="window size, each side 640..8192")
+    p.add_argument("--upscale", metavar="F", help="upscale factor, 1.0 to 2.0")
+    p.add_argument("--window", choices=["full", "hidden"], default="full")
+    p.add_argument("--state", metavar="DIR", help="player state folder")
+    p.add_argument("--volume", metavar="V", help="audio volume, 0 to 1 (default 0.4)")
+    p.add_argument("--dry-run", action="store_true")
+
+    p = sub.add_parser("smoke", help="smoke-test maps headlessly")
+    p.add_argument("maps", nargs="*", metavar="MAP")
+    p.add_argument("--dry-run", action="store_true")
+
+    args = parser.parse_args()
+    handlers = {"doctor": cmd_doctor, "setup": cmd_setup, "signing": cmd_signing, "build": cmd_build,
+                "play": cmd_play, "smoke": cmd_smoke}
+    sys.exit(handlers[args.command](args))
+
+
+if __name__ == "__main__":
+    main()

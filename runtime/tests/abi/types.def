@@ -1,0 +1,7 @@
+# Types used only by the test-only library `rttest`.  Same format as runtime/tools/types.def,
+# which is read first.
+@include rttest.h
+
+RTTEST_BIG     struct   24
+RTTEST_PAIR    struct8  8
+RTTEST_WORD    struct8  2

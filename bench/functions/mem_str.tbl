@@ -1,0 +1,16 @@
+# ---- mem_str.c: memory and string routines, hashing, sorting --------------------------------
+mem_str    str_len            mem     u64   buf=4200:fill=str
+mem_str    str_cmp            mem     i32   buf=64:fill=str  buf=64:copyof=0:mut  u64:lt=65
+mem_str    mem_cmp            mem     i32   buf=64  buf=64:copyof=0:mut  u64:lt=65
+mem_str    copy_words         mem     void  buf=256  buf=256  u32
+mem_str    fill_pattern       mem     void  buf=256  u32  u8
+mem_str    overlap_move       mem     void  buf=128  u32  u32  u32
+mem_str    fnv1a              mem     u32   buf=256  u32
+mem_str    crc32              mem     u32   buf=128  u32
+mem_str    adler              mem     u32   buf=256  u32
+mem_str    insertion_sort     mem     void  buf=128  u32                    @restore
+mem_str    sort_ints          virtual void  buf=64   u32                    @restore
+mem_str    sort_shorts_desc   virtual void  buf=32   u32                    @restore
+mem_str    bsearch_i32        mem     i32   buf=128:fill=i32sorted  u32  i32:lt=300
+mem_str    utoa10             mem     u32   u32  buf=16
+mem_str    hex_parse          mem     u32   buf=16:fill=hex

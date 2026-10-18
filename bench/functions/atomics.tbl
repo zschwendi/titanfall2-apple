@@ -1,0 +1,14 @@
+# ---- atomics.c: lock-prefixed instructions and xchg ------------------------------------------
+atomics    atomic_inc         atomic  i32   buf=4
+atomics    atomic_dec         atomic  i32   buf=4
+atomics    atomic_add64       atomic  i64   buf=8  i64
+atomics    atomic_or          atomic  u32   buf=4  u32
+atomics    atomic_and         atomic  u32   buf=4  u32
+atomics    atomic_swap        atomic  i32   buf=4  i32
+atomics    atomic_swap_ptr    atomic  ptr   buf=8  u64
+atomics    atomic_cas         atomic  i32   buf=4:fill=small32  i32:lt=4  i32
+atomics    atomic_cas64       atomic  i32   buf=8:fill=small64  i64:lt=4  i64
+atomics    atomic_flag_set    atomic  u8    buf=1:fill=small
+atomics    spin_try           atomic  i32   buf=4:fill=small32
+atomics    refcount_release   atomic  u32   buf=4:fill=small32
+atomics    atomic_add16       atomic  i16   buf=2  i16

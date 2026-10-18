@@ -1,0 +1,88 @@
+# The manifest of modules the process can load (docs/RUNTIME.md section 1.3).  Planner-owned.
+#
+#     <kind> <file name> [key=value ...]
+#
+#   lifted   a game DLL whose lifted C is linked into the program; the loader builds its
+#            image from the DLL file.  Written as
+#                lifted <file> dll=<path from the repository root> [module=<lifter module>] [dir=<guest dir>]
+#            The generator reads the DLL and bakes its identity (size, PE timestamp,
+#            SizeOfImage, SHA-256) into the row; the loader refuses any other file.
+#            Lifted modules are NOT listed in this file: librt.a links no lifted code.  The
+#            program that links a module's lifted C lists it in a file of its own in this
+#            format and passes the generated table through RtConfig.extra_modules
+#            (runtime/rt.mk, "lifted modules"; runtime/tests/abi/modules.def is the example).
+#   system   a Windows DLL that exists only as shims (a native module)
+#   stubbed  a game DLL we chose not to lift (a native module; a missing export is a trap stub)
+#   exe      the native module standing in for the executable
+#
+# Order matters: bases are assigned in this order at start-up, 64 KB aligned with a 64 KB
+# gap, lifted modules first and native modules after them (section 1.2), so every address
+# of a build is the same in every run.  Add at the end of a group; do not reorder.
+#
+# Lifted modules get their bases first, in the order of the program's own list (see above).
+# A lifted row written `place=late` is the exception: its base comes from the second half of
+# the image arena (rt/module.h, RT_IMAGE_LATE_BASE), so adding it moves no base of this file.
+
+exe      Titanfall2.exe
+
+# ntdll.dll holds the runtime's own guest-visible code addresses (the return-to-host stub)
+# and is what the C runtime asks GetModuleHandle for; no game DLL imports from it.
+system   ntdll.dll
+
+# The 26 libraries the 24 game DLLs import from (docs/findings/24-import-surface.md).
+system   kernel32.dll
+system   user32.dll
+system   gdi32.dll
+system   advapi32.dll
+system   shell32.dll
+system   ole32.dll
+system   winmm.dll
+system   ws2_32.dll
+system   wsock32.dll
+system   imm32.dll
+system   bcrypt.dll
+system   hid.dll
+system   rpcrt4.dll
+system   setupapi.dll
+system   avrt.dll
+system   psapi.dll
+system   iphlpapi.dll
+system   shlwapi.dll
+system   opengl32.dll
+system   avifil32.dll
+system   d3d9.dll
+system   d3d11.dll
+system   msvcr110.dll
+system   msvcp110.dll
+system   gbclient.dll
+system   mss64.dll
+
+# Game DLLs that are stubbed instead of lifted (PLAN.md; OriginSDK until issue #32).
+stubbed  GFSDK_SSAO.win64.dll
+stubbed  GFSDK_TXAA.win64.dll
+stubbed  OriginSDK.dll
+
+# Microsoft's XInput 1.3 (the DirectX end-user runtime's; not a file of the install).  The
+# input system's init loads it by name and treats a failed load as fatal
+# (docs/handoff/gate3-run-2.md, entry 2).  Three functions, no controller connected
+# (runtime/shims/xinput1_3/).  At the end, so that no other module's base moves.
+system   XInput1_3.dll
+
+# Microsoft's shader compiler library, shipped with the game and not lifted.  The material
+# system imports two functions from it (finding 31, section 7): D3DReflect has a shim that
+# answers from the shader's own bytes (runtime/shims/d3dcompiler_46/; unit d3d-reflect); any
+# other export is a trap stub.  Until that unit the row stood at the end of gate3/modules.def,
+# which follows this table in the order of bases: at the end here, no base moves.
+stubbed  d3dcompiler_46.dll
+
+# DirectSound, of which the game asks one function (DirectSoundCaptureCreate) for voice chat;
+# it answers "no capture device" and the host's microphone is never opened (dsound-capture;
+# runtime/shims/dsound/).  At the end of the file, so that no other module's base moves.
+system   dsound.dll
+
+# Microsoft's XAudio2 2.7 and the MMDevice API, which the game asks for by CoCreateInstance.  They
+# exist to own these interfaces' vtables (runtime/com/interfaces.def, unit com-idl-source) and so
+# that the game can load them by name; they have no shim.  At the end of the file, so that no
+# other module's base moves.
+system   xaudio2_7.dll
+system   mmdevapi.dll

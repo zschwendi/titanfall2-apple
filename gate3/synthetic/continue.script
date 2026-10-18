@@ -1,0 +1,28 @@
+# SYNTHETIC INPUT: nothing here is from the recording and nothing is the owner's input.
+# Written by the planner on 12 October 2026 (decision recorded in NOTES.md, 00:47): the click
+# that starts a new campaign game (the section of new-game.script, unchanged), then ONE tap
+# of the space bar on the loading screen, which the game holds until a key comes.
+#
+#   GATE3_INPUT_SCRIPT=gate3/synthetic/continue.script build/gate3/gate3 run
+#
+# How the key was found: scout-load-key (docs/scout/load-key.md) tried space, Enter, Esc, E
+# and W, one a run, from the kept save.  With the other four the UI still listed
+# LoadingProgress 1,400 Presents into the mission's frames; after the space bar the panel is
+# gone, the client's HUD panels are listed (CBaseViewport, CHudScriptElements, ...) and the
+# device's calls per Present change (run `sp`, NOTES.md, 12 October 01:2x).
+#
+# Times are milliseconds after the anchor fired.
+
+anchor mark main-menu          # the UI's script opened menu_MainMenu (gate3/run.c, THE MENU MARK)
+
+# Click 1: MainMenuPanel/ButtonRow0x0, label #MENU_NEW_GAME (see new-game.script).
+3000 moveto 375 577
+3400 button left down
+3480 button left up
+
+anchor mark mission-frame      # the first Present with the mission's world in it
+
+# The space bar (virtual key 32; scan code from the runtime's US table), 5 s into the
+# loading screen's hold.
+5000 key down 32
+5120 key up 32

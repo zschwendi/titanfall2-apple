@@ -1,0 +1,42 @@
+0 . D3D11CreateDevice =0 n i1 i0 i0 n i0 i7 >o1 >I4[45056] >o2
+1 . ID3D11Device::CreateBuffer =0 o1 sD3D11_BUFFER_DESC{ByteWidth=96,Usage=0,BindFlags=1,CPUAccessFlags=0,MiscFlags=0,StructureByteStride=0} n >o3
+2 . ID3D11Device::CreateBuffer =0 o1 sD3D11_BUFFER_DESC{ByteWidth=64,Usage=0,BindFlags=2,CPUAccessFlags=0,MiscFlags=0,StructureByteStride=0} n >o4
+3 . ID3D11Device::CreateBlendState =0 o1 sD3D11_BLEND_DESC{AlphaToCoverageEnable=0,IndependentBlendEnable=0,RenderTarget[0].BlendEnable=1,RenderTarget[0].SrcBlend=5,RenderTarget[0].DestBlend=6,RenderTarget[0].BlendOp=1,RenderTarget[0].SrcBlendAlpha=2,RenderTarget[0].DestBlendAlpha=1,RenderTarget[0].BlendOpAlpha=1,RenderTarget[0].RenderTargetWriteMask=15} >o5
+4 . ID3D11Device::CreateDepthStencilState =0 o1 sD3D11_DEPTH_STENCIL_DESC{DepthEnable=1,DepthWriteMask=1,DepthFunc=2,StencilEnable=0,StencilReadMask=255,StencilWriteMask=255,FrontFace.StencilFailOp=1,FrontFace.StencilDepthFailOp=1,FrontFace.StencilPassOp=1,FrontFace.StencilFunc=8,BackFace.StencilFailOp=1,BackFace.StencilDepthFailOp=1,BackFace.StencilPassOp=1,BackFace.StencilFunc=8} >o6
+5 . ID3D11Device::CreateRasterizerState =0 o1 sD3D11_RASTERIZER_DESC{FillMode=3,CullMode=3,FrontCounterClockwise=0,DepthBias=0,DepthBiasClamp=0,SlopeScaledDepthBias=0,DepthClipEnable=1,ScissorEnable=0,MultisampleEnable=0,AntialiasedLineEnable=0} >o7
+6 . ID3D11Device::CreateTexture2D =0 o1 sD3D11_TEXTURE2D_DESC{Width=64,Height=64,MipLevels=1,ArraySize=1,Format=28,SampleDesc.Count=1,SampleDesc.Quality=0,Usage=0,BindFlags=40,CPUAccessFlags=0,MiscFlags=0} n >o8
+7 . ID3D11Device::CreateRenderTargetView =0 o1 o8 sD3D11_RENDER_TARGET_VIEW_DESC{Format=28,ViewDimension=4,Texture2D.MipSlice=0} >o9
+8 . ID3D11Device::CreateTexture2D =0 o1 sD3D11_TEXTURE2D_DESC{Width=64,Height=64,MipLevels=1,ArraySize=1,Format=45,SampleDesc.Count=1,SampleDesc.Quality=0,Usage=0,BindFlags=64,CPUAccessFlags=0,MiscFlags=0} n >o10
+9 . ID3D11Device::CreateDepthStencilView =0 o1 o10 sD3D11_DEPTH_STENCIL_VIEW_DESC{Format=45,ViewDimension=3,Flags=0,Texture2D.MipSlice=0} >o11
+10 . ID3D11Device::CreateTexture2D =0 o1 sD3D11_TEXTURE2D_DESC{Width=64,Height=64,MipLevels=1,ArraySize=1,Format=28,SampleDesc.Count=1,SampleDesc.Quality=0,Usage=0,BindFlags=128,CPUAccessFlags=0,MiscFlags=0} n >o12
+11 . ID3D11Device::CreateUnorderedAccessView =0 o1 o12 sD3D11_UNORDERED_ACCESS_VIEW_DESC{Format=28,ViewDimension=4,Texture2D.MipSlice=0} >o13
+12 . ID3D11DeviceContext::IASetVertexBuffers - o2 i0 i1 O[3] I4[16] I4[0]
+13 . ID3D11DeviceContext::IASetIndexBuffer - o2 o4 i57 i0
+14 . ID3D11DeviceContext::IASetInputLayout - o2 n
+15 . ID3D11DeviceContext::IASetPrimitiveTopology - o2 i4
+16 . ID3D11DeviceContext::RSSetState - o2 o7
+17 . ID3D11DeviceContext::RSSetViewports - o2 i1 sD3D11_VIEWPORT{TopLeftX=0,TopLeftY=0,Width=64,Height=64,MinDepth=0,MaxDepth=1}
+18 . ID3D11DeviceContext::OMSetBlendState - o2 o5 F[1,1,1,1] i4294967295
+19 . ID3D11DeviceContext::OMSetDepthStencilState - o2 o6 i0
+20 . ID3D11DeviceContext::OMSetRenderTargets - o2 i1 O[9] o11
+21 . ID3D11DeviceContext::CSSetUnorderedAccessViews - o2 i0 i1 O[13] n
+22 . ID3D11DeviceContext::CSSetUnorderedAccessViews - o2 i0 i1 O[0] n
+23 . ID3D11DeviceContext::OMSetRenderTargets - o2 i0 O[] n
+24 . ID3D11DeviceContext::OMSetDepthStencilState - o2 n i0
+25 . ID3D11DeviceContext::OMSetBlendState - o2 n F[1,1,1,1] i4294967295
+26 . ID3D11DeviceContext::RSSetState - o2 n
+27 . ID3D11DeviceContext::IASetVertexBuffers - o2 i0 i1 O[0] I4[0] I4[0]
+28 . ID3D11DeviceContext::IASetIndexBuffer - o2 n i0 i0
+29 . ID3D11UnorderedAccessView::Release =0 o13
+30 . ID3D11Texture2D::Release =0 o12
+31 . ID3D11DepthStencilView::Release =0 o11
+32 . ID3D11Texture2D::Release =0 o10
+33 . ID3D11RenderTargetView::Release =0 o9
+34 . ID3D11Texture2D::Release =0 o8
+35 . ID3D11RasterizerState::Release =0 o7
+36 . ID3D11DepthStencilState::Release =0 o6
+37 . ID3D11BlendState::Release =0 o5
+38 . ID3D11Buffer::Release =0 o4
+39 . ID3D11Buffer::Release =0 o3
+40 . ID3D11DeviceContext::Release =0 o2
+41 . ID3D11Device::Release =0 o1

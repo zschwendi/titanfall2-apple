@@ -1,0 +1,2 @@
+Test files written from a task's test plan before its body exists (docs/handoff/rt-contract-loader.md).
+The build does not compile this directory; the task that writes the body moves its file up, unchanged.

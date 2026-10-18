@@ -1,0 +1,6 @@
+# The lifted modules of the Gate 2 driver (gate2/driver.c), in the format of runtime/modules.def.
+# gen_shims.py reads each DLL at build time and bakes its identity into the generated row
+# (gate2/gate2.mk); the driver hands the table to rt_init through RtConfig.extra_modules.
+# Bases are assigned in this order, before the native modules of runtime/modules.def.
+lifted   tier0.dll     dll=game/bin/x64_retail/tier0.dll
+lifted   vstdlib.dll   dll=game/bin/x64_retail/vstdlib.dll

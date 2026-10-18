@@ -1,0 +1,25 @@
+# ---- int_arith.c: integer and pointer arithmetic at every width -----------------------------
+int_arith  mix32              arith   u32   u32  u32
+int_arith  mix64              arith   u64   u64  u64
+int_arith  sdivmod            arith   i32   i32  i32  buf=4
+int_arith  udivmod64          arith   u64   u64  u64  buf=8
+int_arith  sdiv64             arith   i64   i64  i64
+int_arith  mulhi              arith   u64   u64  u64
+int_arith  smulhi             arith   i64   i64  i64
+int_arith  narrow8            arith   u8    u8  u8  i8
+int_arith  narrow16           arith   u16   u16  i16
+int_arith  widen              arith   i64   i8  i16  i32  u8  u16  u32
+int_arith  shifts             arith   u32   u32  u32
+int_arith  shifts64           arith   u64   u64  u32
+int_arith  popcount32         arith   u32   u32
+int_arith  clz32              arith   u32   u32
+int_arith  bswap32            arith   u32   u32
+int_arith  clamp              arith   i32   i32  i32  i32
+int_arith  sign               arith   i32   i64
+int_arith  select             arith   u32   u32  u32  u32  u32
+int_arith  carry_chain        arith   u64   u64  u64  u64  u64  buf=8
+int_arith  borrow_chain       arith   u64   u64  u64  u64  u64  buf=8
+int_arith  ptr_diff           arith   i64   u64:mask=0xfffffffffffffffc  u64:mask=0xfffffffffffffffc
+int_arith  collatz            arith   u32   u32
+int_arith  gcd                arith   u32   u32  u32
+int_arith  isqrt              arith   u32   u32

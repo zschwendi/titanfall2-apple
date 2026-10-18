@@ -1,0 +1,16 @@
+# A hand-written example of an input script (runtime/include/rt/input.h has the format).
+# Nothing here is from the recording: the points and times are made up.
+#
+#   GATE3_INPUT_SCRIPT=tools/trace/input_example.script build/gate3/gate3 run
+#
+# Times are milliseconds after the `anchor` line above them fired.
+
+anchor present 1              # the run's first IDXGISwapChain::Present
+500 moveto 960 600            # the pointer goes to the screen point (960, 600)
+600 button left down
+680 button left up
+
+anchor present +30            # 30 more Presents after that anchor
+0   move 12 -7                # the mouse moves 12 right, 7 up
+16  move 11 -6
+32  move 9 -4

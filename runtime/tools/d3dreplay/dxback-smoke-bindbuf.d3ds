@@ -1,0 +1,27 @@
+0 . D3D11CreateDevice =0 n i1 i0 i0 n i0 i7 >o1 >I4[45056] >o2
+1 . ID3D11Device::CreateBuffer =0 o1 sD3D11_BUFFER_DESC{ByteWidth=256,Usage=0,BindFlags=4,CPUAccessFlags=0,MiscFlags=0,StructureByteStride=0} n >o3
+2 . ID3D11Device::CreateBuffer =0 o1 sD3D11_BUFFER_DESC{ByteWidth=256,Usage=0,BindFlags=4,CPUAccessFlags=0,MiscFlags=0,StructureByteStride=0} n >o4
+3 . ID3D11Device::CreateTexture2D =0 o1 sD3D11_TEXTURE2D_DESC{Width=4,Height=4,MipLevels=1,ArraySize=1,Format=28,SampleDesc.Count=1,SampleDesc.Quality=0,Usage=0,BindFlags=8,CPUAccessFlags=0,MiscFlags=0} n >o5
+4 . ID3D11Device::CreateShaderResourceView =0 o1 o5 sD3D11_SHADER_RESOURCE_VIEW_DESC{Format=28,ViewDimension=4,Texture2D.MostDetailedMip=0,Texture2D.MipLevels=1} >o6
+5 . ID3D11DeviceContext::VSSetConstantBuffers - o2 i0 i2 O[3,4]
+6 . ID3D11DeviceContext::PSSetConstantBuffers - o2 i0 i2 O[3,4]
+7 . ID3D11DeviceContext::GSSetConstantBuffers - o2 i0 i2 O[3,4]
+8 . ID3D11DeviceContext::CSSetConstantBuffers - o2 i0 i2 O[3,4]
+9 . ID3D11DeviceContext::VSSetShaderResources - o2 i0 i1 O[6]
+10 . ID3D11DeviceContext::PSSetShaderResources - o2 i0 i1 O[6]
+11 . ID3D11DeviceContext::GSSetShaderResources - o2 i0 i1 O[6]
+12 . ID3D11DeviceContext::CSSetShaderResources - o2 i0 i1 O[6]
+13 . ID3D11DeviceContext::VSSetConstantBuffers - o2 i0 i2 O[0,0]
+14 . ID3D11DeviceContext::PSSetConstantBuffers - o2 i0 i2 O[0,0]
+15 . ID3D11DeviceContext::GSSetConstantBuffers - o2 i0 i2 O[0,0]
+16 . ID3D11DeviceContext::CSSetConstantBuffers - o2 i0 i2 O[0,0]
+17 . ID3D11DeviceContext::VSSetShaderResources - o2 i0 i1 O[0]
+18 . ID3D11DeviceContext::PSSetShaderResources - o2 i0 i1 O[0]
+19 . ID3D11DeviceContext::GSSetShaderResources - o2 i0 i1 O[0]
+20 . ID3D11DeviceContext::CSSetShaderResources - o2 i0 i1 O[0]
+21 . ID3D11ShaderResourceView::Release =0 o6
+22 . ID3D11Texture2D::Release =0 o5
+23 . ID3D11Buffer::Release =0 o4
+24 . ID3D11Buffer::Release =0 o3
+25 . ID3D11DeviceContext::Release =0 o2
+26 . ID3D11Device::Release =0 o1

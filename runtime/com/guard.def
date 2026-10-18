@@ -1,0 +1,18 @@
+# Methods whose thunk calls a guard around the body (runtime/tools/gen_com.py, --guard).
+#
+#     <Interface>              <enter function>  <leave function>     every method after IUnknown's three
+#     <Interface>::<Method>    <enter function>  <leave function>     one method
+#
+#     void *enter(Ctx *ctx, void *This, const RtComMethod *m);    after the call was counted, before the body
+#     void  leave(void *guard);                                   with what enter returned, before the thunk returns
+#
+# ONE THREAD IN THE IMMEDIATE CONTEXT AT A TIME (rt/d3dback.h, rule 8; rt/nulldev.h, NdGuard;
+# docs/handoff/design-picture.md, section 5: "The immediate context is not locked").  Direct3D
+# does not lock the immediate context and neither does the renderer that will stand behind this
+# device, so the front records the thread of each context call and stops when a second thread
+# enters while one is inside.  The swap chain's Present and ResizeBuffers are here too: in a
+# renderer both work on the device's context (the present ends the frame the context recorded).
+
+ID3D11DeviceContext              rt_nulldev_guard_enter rt_nulldev_guard_leave
+IDXGISwapChain::Present          rt_nulldev_guard_enter rt_nulldev_guard_leave
+IDXGISwapChain::ResizeBuffers    rt_nulldev_guard_enter rt_nulldev_guard_leave

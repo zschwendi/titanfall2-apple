@@ -1,0 +1,8 @@
+# ---- switches.c: dense, sparse, nested switches and a bytecode interpreter -------------------
+switches   dense              switch  i32   i32:lt=18  i32  i32
+switches   dense_offset       switch  i32   i32:pick=100|101|102|103|104|105|106|107|108|109|110|111|112|113|99
+switches   sparse             switch  i32   u32:pick=1|17|300|4096|70000|0x10000000|0xffffffff|2|16
+switches   fallthrough        switch  i32   i32  i32
+switches   nested             switch  i32   i32  i32
+switches   byte_table         switch  u8    u8
+switches   interp             switch  i64   buf=64  u32:lt=65  i64

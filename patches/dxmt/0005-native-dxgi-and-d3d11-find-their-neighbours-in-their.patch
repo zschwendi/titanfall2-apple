@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tfrecomp <tfrecomp@example.invalid>
+Date: Mon, 12 Oct 2026 00:12:57 -0400
+Subject: [PATCH 05/12] native: dxgi and d3d11 find their neighbours in their
+ own directory
+
+The native libraries name each other as @rpath/<name>.dylib and carried
+only the rpaths of the build tree (@loader_path/../nativemetal, ...), so
+the three files copied into one directory, for example Contents/Frameworks
+of an app bundle, did not load without DYLD_LIBRARY_PATH or an rpath in
+the host executable.  Add @loader_path to dxgi.dylib and d3d11.dylib
+(winemetal.dylib has it already).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/d3d11/meson.build | 1 +
+ src/dxgi/meson.build  | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/src/d3d11/meson.build b/src/d3d11/meson.build
+index 948db2a..352b6fc 100644
+--- a/src/d3d11/meson.build
++++ b/src/d3d11/meson.build
+@@ -56,6 +56,7 @@ d3d11_dll = shared_library('d3d11', d3d11_src, d3d10_src, d3d11_res,
+   vs_module_defs      : 'd3d11.def',
+   link_args           : d3d11_ld_args,
+   link_depends        : [ d3d11_link_depends ],
++  build_rpath         : dxmt_crossbuild ? '' : '@loader_path',
+ )
+ 
+ d3d11_dep = declare_dependency(
+diff --git a/src/dxgi/meson.build b/src/dxgi/meson.build
+index acf8347..e966f00 100644
+--- a/src/dxgi/meson.build
++++ b/src/dxgi/meson.build
+@@ -20,6 +20,7 @@ dxgi_dll = shared_library('dxgi', dxgi_src, dxgi_res,
+   vs_module_defs      : 'dxgi.def',
+   link_args           : dxgi_ld_args,
+   link_depends        : [ dxgi_link_depends ],
++  build_rpath         : dxmt_crossbuild ? '' : '@loader_path',
+ )
+ 
+ dxgi_dep = declare_dependency(

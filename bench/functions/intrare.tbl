@@ -1,0 +1,178 @@
+# ---- intrare.c: instructions the compiler rarely emits (native side: bench/native/intrare_ref.c) ----
+# The corpus source is x86 inline assembly, so the native side is a hand-written C reference that
+# must match the x86 function bit for bit.  Counts and bit offsets use lt=N so that every masked
+# value (and the wrap past the mask) is reached; ir_enter has no row (see the end of the file).
+
+# ---- rotate through carry (the carry comes in through bit 0 of the cf argument) ----
+intrare    ir_rcl1                probe  u32  u32  u32
+intrare    ir_rcl8_imm            probe  u8   u8   u32
+intrare    ir_rcl32_cl            probe  u32  u32  u32:lt=64  u32
+intrare    ir_rcr16_1             probe  u16  u16  u32
+intrare    ir_rcr64_cl            probe  u64  u64  u32:lt=64  u32
+intrare    ir_rcr32_mem           probe  u32  buf=4  u32:lt=64  u32
+
+# ---- flag transfers ----
+# Operands that land on zero sums, carries and half carries are common among the picks.
+intrare    ir_lahf                probe  u32  u32:pick=0|1|0x0f|0x7f|0x80|0xf0|0xff  u32:pick=0|1|0x0f|0x7f|0x80|0xf0|0xff
+intrare    ir_sahf                probe  u32  u32  u32
+intrare    ir_pushfq_popfq        probe  u64  u64:pick=0|1|0xf|0x7fffffffffffffff|0x8000000000000000|0xffffffffffffffff  u64:pick=0|1|0xf|0x7fffffffffffffff|0x8000000000000000|0xffffffffffffffff
+intrare    ir_popfq_reload        probe  u64  u64
+
+# ---- table translation (idx is reduced to a byte, so the 256-byte table is the whole range) ----
+intrare    ir_xlatb               probe  u8   buf=256  u32:lt=300
+intrare    ir_xlatb_mem           probe  u8   buf=256  u32:lt=300
+
+# ---- byte swap moves ----
+intrare    ir_movbe32             probe  u32  buf=4
+intrare    ir_movbe32_store       probe  void buf=4  u32
+intrare    ir_movbe64             probe  u64  buf=8
+intrare    ir_movbe16             probe  u16  buf=2
+
+# ---- andn ----
+intrare    ir_andn32              probe  u32  u32  u32
+intrare    ir_andn64_mem          probe  u64  u64  buf=8
+
+# ---- double-precision shifts (a masked count of 0 leaves the destination alone) ----
+intrare    ir_shld32_imm          probe  u32  u32  u32
+intrare    ir_shld64_cl           probe  u64  u64  u64  u32:lt=64
+intrare    ir_shrd16_imm          probe  u16  u16  u16
+intrare    ir_shrd32_cl           probe  u32  u32  u32  u32:lt=32
+intrare    ir_shld32_mem          probe  void buf=4  u32  u32:lt=32
+intrare    ir_shrd64_mem          probe  void buf=8  u64
+
+# ---- bit scans ----
+# ir_bsf_mem takes its zero path (the wrapper stores 0x40) in about one case in seventy-five.
+intrare    ir_bsf32               probe  u32  u32
+intrare    ir_bsr64               probe  u64  u64
+intrare    ir_bsf_mem             probe  u32  buf=4
+intrare    ir_bsr16               probe  u16  u16
+
+# ---- bit test family ----
+# Register destinations take the offset modulo the operand size.  The memory forms mask the offset
+# to 0..127 in the wrapper (lt=256 also reaches the masking) and so touch the first 16 bytes only;
+# ir_bts_mem_imm uses the immediate 40 on a dword in memory, which is bit 8 of the first dword,
+# and the rest of its 16 bytes show that nothing else is written.
+intrare    ir_bt32_reg            probe  u32  u32  u32:lt=64
+intrare    ir_bt_mem_far          probe  u32  buf=16  u32:lt=256
+intrare    ir_bts_reg             probe  u32  u32  u32:lt=64
+intrare    ir_btr64_reg           probe  u64  u64  u64:lt=128
+intrare    ir_btc_imm             probe  u32  u32
+intrare    ir_bts_mem             probe  u32  buf=16  u32:lt=256
+intrare    ir_btr_mem             probe  u32  buf=16  u32:lt=256
+intrare    ir_btc_mem             probe  u32  buf=16  u32:lt=256
+intrare    ir_bts_mem_imm         probe  u32  buf=16
+
+# ---- lock-prefixed read-modify-write on memory ----
+intrare    ir_lock_add            probe  void buf=4  u32
+intrare    ir_lock_sub            probe  void buf=4  u32
+intrare    ir_lock_and            probe  void buf=4  u32
+intrare    ir_lock_or             probe  void buf=4  u32
+intrare    ir_lock_xor            probe  void buf=4  u32
+intrare    ir_lock_inc            probe  void buf=4
+intrare    ir_lock_dec            probe  void buf=8
+intrare    ir_lock_not            probe  void buf=2
+intrare    ir_lock_addb           probe  void buf=1  u8
+intrare    ir_lock_bts            probe  u32  buf=4  u32:lt=64
+intrare    ir_lock_btr            probe  u32  buf=4  u32:lt=64
+intrare    ir_lock_btc            probe  u32  buf=4  u32:lt=64
+
+# ---- xadd and cmpxchg ----
+# A cmpxchg succeeds only when expect equals the memory: the buffers hold small values and expect
+# is below 4.  (fill=small32 on the two-byte buffer sets just its first byte, so the u16 is 0..3.)
+intrare    ir_xadd32              probe  u32  buf=4  u32
+intrare    ir_xadd8               probe  u8   buf=1  u8
+intrare    ir_cmpxchg64           probe  u64  buf=8:fill=small64  u64:lt=4  u64
+intrare    ir_cmpxchg32_flag      probe  u32  buf=4:fill=small32  u32:lt=4  u32
+intrare    ir_cmpxchg16           probe  u16  buf=2:fill=small32  u16:lt=4  u16
+
+# ---- mul, div, sign extension ----
+intrare    ir_mul32_wide          probe  u64  u32  u32
+intrare    ir_imul64_1op          probe  i64  i64  i64  buf=8
+intrare    ir_div32               probe  u32  u64  u32  buf=4
+intrare    ir_idiv32              probe  i32  i64  i32  buf=4
+intrare    ir_div16               probe  u32  u32  u16
+intrare    ir_idiv8               probe  i8   i8   i8
+intrare    ir_imul3               probe  i32  i32
+intrare    ir_imul_mem            probe  i32  buf=8
+intrare    ir_imul16_imm          probe  i16  i16
+intrare    ir_imul64_mem          probe  i64  i64  buf=8
+intrare    ir_cbw                 probe  u32  u32
+intrare    ir_cwde                probe  u32  u32
+intrare    ir_cdqe                probe  u64  u64
+# cwd writes only dx, and the wrapper returns edx: the upper 16 bits are whatever edx held on entry
+# (the function has one parameter, in ecx), so only the low 16 bits are defined.
+intrare    ir_cwd                 probe  u16  u32
+intrare    ir_cdq                 probe  u32  u32
+intrare    ir_cqo                 probe  u64  u64
+
+# ---- loops and jrcxz ----
+# ir_loope only runs more than once when acc is 1, hence the picks.
+intrare    ir_loop                probe  u32  u32:lt=16  u32
+intrare    ir_loope               probe  u32  u32:lt=16  u32:pick=0|1|2
+intrare    ir_loopne              probe  u32  u32:lt=16  u32
+intrare    ir_jrcxz               probe  u32  u32:lt=8
+
+# ---- enter and leave ----
+intrare    ir_leave_frame         probe  u64  u64
+
+# ---- string instructions ----
+# Sizes: n masked to 63 bytes, 31 words, 31 dwords or 15 qwords.  The *_back functions run with DF
+# set, so their pointers walk down from the given address (at most 31 bytes below it): off=32 puts
+# the pointer in the middle of the buffer.  The repe compare gets a second buffer that is a copy of
+# the first with one byte changed three times in four, so the buffers agree for a while.  The repne
+# functions stop on a match, so ir_cmpsb_ne gets two independent buffers of small values (a match
+# every few bytes; a copy would stop at the first byte) and the scans a needle that is sometimes
+# absent.  ir_scasw (repe) needs runs of equal words: small64 leaves three words in four zero, and
+# the needle is 0 or 1.
+intrare    ir_movsb               probe  void buf=64  buf=64  u32:lt=64
+intrare    ir_movsw               probe  void buf=64  buf=64  u32:lt=32
+intrare    ir_movsd               probe  void buf=128  buf=128  u32:lt=32
+intrare    ir_movsq               probe  void buf=128  buf=128  u32:lt=16
+intrare    ir_movsb_back          probe  void buf=64:off=32  buf=64:off=32  u32:lt=32
+intrare    ir_movsq_once          probe  void buf=8  buf=8
+intrare    ir_stosb               probe  void buf=64  u8  u32:lt=64
+intrare    ir_stosw               probe  void buf=64  u16  u32:lt=32
+intrare    ir_stosd               probe  void buf=128  u32  u32:lt=32
+intrare    ir_stosq               probe  void buf=128  u64  u32:lt=16
+intrare    ir_stosb_back          probe  void buf=64:off=32  u8  u32:lt=32
+intrare    ir_cmpsb               probe  u32  buf=64  buf=64:copyof=0:mut  u32:lt=64
+intrare    ir_cmpsb_ne            probe  u32  buf=64:fill=small  buf=64:fill=small  u32:lt=64
+intrare    ir_scasb               probe  u32  buf=64:fill=small  u32:lt=64  u32:lt=8
+intrare    ir_scasw               probe  u32  buf=64:fill=small64  u32:lt=32  u32:lt=2
+intrare    ir_scasb_once          probe  u32  buf=8:fill=small  u32:lt=4
+intrare    ir_lodsb               probe  u8   buf=8  u32
+intrare    ir_lodsb_loop          probe  u32  buf=16  u32:lt=16
+
+# ---- MXCSR (the reference returns the reset value 0x1F80, as the guest starts with) ----
+intrare    ir_stmxcsr             probe  u32  u32
+intrare    ir_mxcsr_round_restore probe  u32  u32
+intrare    ir_mxcsr_default       probe  u32  u32
+
+# ---- adc and sbb (the carry comes in through bit 0 of the cf argument) ----
+intrare    ir_adc32_reg           probe  u32  u32  u32  u32
+intrare    ir_adc64_imm           probe  u64  u64  u32
+intrare    ir_adc64_mem           probe  void buf=8  u64  u32
+intrare    ir_adc8                probe  u8   u8   u8   u32
+intrare    ir_sbb32_reg           probe  u32  u32  u32  u32
+intrare    ir_sbb16_imm           probe  u16  u16  u32
+intrare    ir_sbb32_mem           probe  void buf=4  u32  u32
+intrare    ir_sbb64_reg           probe  u64  u64  u64  u32
+
+# ---- mul and div at the remaining widths ----
+intrare    ir_mul8                probe  u16  u8   u8
+intrare    ir_mul64_wide          probe  u64  u64  u64  buf=8
+intrare    ir_div64               probe  u64  u64  u64  u64  buf=8
+intrare    ir_idiv64              probe  i64  i64  i64  buf=8
+
+# ---- cmpxchg16b ----
+# The direct form needs a 16-byte aligned operand: buffers start at least 16-byte aligned, so off=0
+# is aligned (the compare-exchange runs) and off=8 is not (the wrapper returns 2 without touching
+# memory).  expect is a copy of the memory, changed in one byte three times in four, so the
+# compare-exchange succeeds in about one aligned case in four.
+intrare    ir_cmpxchg16b_direct   probe  u32  buf=16:off=0|8  buf=16:copyof=0:mut  u64  u64
+intrare    ir_cmpxchg16b_copy     probe  u32  buf=16  buf=16:copyof=0:mut  u64  u64
+
+# Not described:
+#   ir_enter  returns rbp after `enter $16, $0`, which is an address on the guest's stack.  It
+#             cannot be reproduced natively; the reference defines it (returning 0) only so that
+#             the symbol exists.

@@ -1,0 +1,382 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tfrecomp <tfrecomp@example.invalid>
+Date: Tue, 13 Oct 2026 03:56:44 -0400
+Subject: [PATCH 07/12] native: DXMT_PASS_TIMES=<N> prints the GPU time of
+ every pass by kind every N frames
+
+With the variable set every command buffer gets a counter sample buffer and every render, compute
+and blit pass samples the GPU clock at its stage boundaries.  On completion the samples are added up
+by kind of pass (size and formats of the target); every N presented frames the means per frame are
+printed on standard error (PASS-TIMES) and one frame's passes are printed in order (PASS-TRACE).
+Nothing runs when the variable is unset.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/winemetal/unix/winemetal_unix.c | 312 ++++++++++++++++++++++++++++
+ 1 file changed, 312 insertions(+)
+
+diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
+index 9abdbbc..1ec22d4 100644
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -20,6 +20,257 @@ typedef int NTSTATUS;
+ #define STATUS_SUCCESS 0
+ #define STATUS_UNSUCCESSFUL 0xC0000001
+ 
++/* ---- DXMT_PASS_TIMES=<N>: where the GPU's time goes, pass by pass -----------------------------
++ * With the variable set, every command buffer gets a counter sample buffer and every render,
++ * compute and blit pass samples the GPU's clock at its stage boundaries (render: start and end
++ * of the vertex stage and of the fragment stage; compute and blit: start and end of the encoder).
++ * When a command buffer completes its samples are resolved and added up by kind of pass (size
++ * and formats of the target).  Every N presented frames the sums are printed on standard error
++ * as means per frame ("PASS-TIMES"), and the passes of one frame are printed in order
++ * ("PASS-TRACE").  Nothing here runs when the variable is unset.  Blit encoders that DXMT makes
++ * with its own sample buffers (timestamp queries) are left alone and not counted.  */
++#include <os/lock.h>
++#include <time.h>
++
++#define PT_SAMPLES 2048 /* counter samples per command buffer */
++#define PT_PASSES 640
++#define PT_KINDS 128
++
++struct pt_pass {
++  uint8_t kind, ncolor, samples, acts; /* kind: 0 render, 1 compute, 2 blit */
++  uint16_t w, h, fmt0, fmtd;
++  int16_t first; /* its first counter sample, -1: the sample buffer was full */
++};
++struct pt_cb {
++  struct pt_cb *next;
++  id<MTLCounterSampleBuffer> buf;
++  unsigned npass, nsample;
++  uint64_t frame;
++  struct pt_pass pass[PT_PASSES];
++};
++struct pt_kind {
++  struct pt_pass key;
++  uint64_t n, timed, vert, frag;
++};
++
++static int pt_every = -1;
++static os_unfair_lock pt_lock = OS_UNFAIR_LOCK_INIT;
++static struct pt_cb *pt_free;
++static struct pt_kind pt_kinds[PT_KINDS];
++static unsigned pt_nkinds;
++static _Atomic uint64_t pt_frames;
++static uint64_t pt_frame0, pt_trace_frame, pt_g0, pt_t0, pt_cbs;
++static double pt_cb_gpu_s;
++static id<MTLDevice> pt_device;
++static const char pt_key;
++static const char *const pt_names[3] = {"render", "compute", "blit"};
++
++static int
++pt_on(void) {
++  if (pt_every < 0) {
++    const char *e = getenv("DXMT_PASS_TIMES");
++    int n = e ? atoi(e) : 0;
++    pt_every = n > 0 ? n : 0;
++  }
++  return pt_every;
++}
++
++static double
++pt_ns_per_tick(void) {
++  MTLTimestamp c = 0, g = 0;
++  [pt_device sampleTimestamps:&c gpuTimestamp:&g];
++  uint64_t t = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
++  return g > pt_g0 ? (double)(t - pt_t0) / (double)(g - pt_g0) : 1.0;
++}
++
++static int
++pt_ok(uint64_t a, uint64_t b) {
++  return a && b && a != MTLCounterErrorValue && b != MTLCounterErrorValue && b >= a;
++}
++
++static struct pt_kind *
++pt_find(const struct pt_pass *q) {
++  for (unsigned i = 0; i < pt_nkinds; i++) {
++    const struct pt_pass *k = &pt_kinds[i].key;
++    if (k->kind == q->kind && k->ncolor == q->ncolor && k->samples == q->samples && k->w == q->w && k->h == q->h &&
++        k->fmt0 == q->fmt0 && k->fmtd == q->fmtd)
++      return &pt_kinds[i];
++  }
++  if (pt_nkinds == PT_KINDS)
++    return NULL;
++  memset(&pt_kinds[pt_nkinds], 0, sizeof pt_kinds[0]);
++  pt_kinds[pt_nkinds].key = *q;
++  return &pt_kinds[pt_nkinds++];
++}
++
++static void
++pt_print(uint64_t frames) {
++  double n = (double)(frames - pt_frame0), ns = pt_ns_per_tick(), sv = 0, sf[3] = {0, 0, 0};
++  uint64_t np = 0;
++  unsigned order[PT_KINDS];
++  for (unsigned i = 0; i < pt_nkinds; i++) {
++    order[i] = i;
++    np += pt_kinds[i].n;
++    sv += pt_kinds[i].vert;
++    sf[pt_kinds[i].key.kind] += pt_kinds[i].frag;
++  }
++  for (unsigned i = 0; i < pt_nkinds; i++)
++    for (unsigned j = i + 1; j < pt_nkinds; j++) {
++      struct pt_kind *a = &pt_kinds[order[i]], *b = &pt_kinds[order[j]];
++      if (b->vert + b->frag > a->vert + a->frag) {
++        unsigned t = order[i];
++        order[i] = order[j];
++        order[j] = t;
++      }
++    }
++  fprintf(
++      stderr,
++      "PASS-TIMES frames %.0f: %.1f command buffers per frame, their GPU time %.2f ms per frame; %.1f passes per "
++      "frame: render vertex %.2f ms, render fragment %.2f ms, compute %.2f ms, blit %.2f ms per frame "
++      "(%.3f ns per GPU tick)\n",
++      n, pt_cbs / n, pt_cb_gpu_s * 1e3 / n, np / n, sv * ns / 1e6 / n, sf[0] * ns / 1e6 / n, sf[1] * ns / 1e6 / n,
++      sf[2] * ns / 1e6 / n, ns
++  );
++  for (unsigned i = 0; i < pt_nkinds; i++) {
++    struct pt_kind *k = &pt_kinds[order[i]];
++    fprintf(
++        stderr, "PASS-TIMES   %-7s %5ux%-5u c%-3u d%-3u n%u s%u: %7.2f per frame, vertex %7.3f ms, %s %7.3f ms",
++        pt_names[k->key.kind], k->key.w, k->key.h, k->key.fmt0, k->key.fmtd, k->key.ncolor, k->key.samples, k->n / n,
++        k->vert * ns / 1e6 / n, k->key.kind ? "encoder " : "fragment", k->frag * ns / 1e6 / n
++    );
++    if (k->timed < k->n)
++      fprintf(stderr, " (%llu of %llu without a time)", (unsigned long long)(k->n - k->timed), (unsigned long long)k->n);
++    fputc('\n', stderr);
++  }
++  pt_nkinds = 0;
++  pt_frame0 = frames;
++  pt_cbs = 0;
++  pt_cb_gpu_s = 0;
++  pt_trace_frame = frames + 2;
++}
++
++static void
++pt_done(struct pt_cb *p, id<MTLCommandBuffer> cb) {
++  @autoreleasepool {
++    const MTLCounterResultTimestamp *t = NULL;
++    if (p->buf && p->nsample) {
++      NSData *d = [p->buf resolveCounterRange:NSMakeRange(0, p->nsample)];
++      if (d && d.length >= p->nsample * sizeof *t)
++        t = d.bytes;
++    }
++    os_unfair_lock_lock(&pt_lock);
++    int trace = p->frame == pt_trace_frame;
++    double ns = trace ? pt_ns_per_tick() : 0;
++    pt_cbs++;
++    pt_cb_gpu_s += cb.GPUEndTime - cb.GPUStartTime;
++    if (trace)
++      fprintf(
++          stderr, "PASS-TRACE frame %llu: command buffer of %u passes, GPU time %.3f ms\n",
++          (unsigned long long)p->frame, p->npass, (cb.GPUEndTime - cb.GPUStartTime) * 1e3
++      );
++    for (unsigned i = 0; i < p->npass; i++) {
++      struct pt_pass *q = &p->pass[i];
++      uint64_t v = 0, f = 0;
++      int ok = 0;
++      if (t && q->first >= 0) {
++        const MTLCounterResultTimestamp *s = t + q->first;
++        if (q->kind == 0) {
++          if (pt_ok(s[0].timestamp, s[1].timestamp))
++            v = s[1].timestamp - s[0].timestamp, ok = 1;
++          if (pt_ok(s[2].timestamp, s[3].timestamp))
++            f = s[3].timestamp - s[2].timestamp, ok = 1;
++        } else if (pt_ok(s[0].timestamp, s[1].timestamp))
++          f = s[1].timestamp - s[0].timestamp, ok = 1;
++      }
++      struct pt_kind *k = pt_find(q);
++      if (k) {
++        k->n++;
++        k->timed += ok;
++        k->vert += v;
++        k->frag += f;
++      }
++      if (trace)
++        fprintf(
++            stderr,
++            "PASS-TRACE   %3u %-7s %5ux%-5u c%-3u d%-3u n%u s%u load/store colour %u/%u depth %u/%u: vertex %7.3f ms, "
++            "%s %7.3f ms%s\n",
++            i, pt_names[q->kind], q->w, q->h, q->fmt0, q->fmtd, q->ncolor, q->samples, q->acts & 3, q->acts >> 2 & 3,
++            q->acts >> 4 & 3, q->acts >> 6 & 3, v * ns / 1e6, q->kind ? "encoder " : "fragment", f * ns / 1e6,
++            ok ? "" : " (no time)"
++        );
++    }
++    uint64_t frames = atomic_load(&pt_frames);
++    if (frames - pt_frame0 >= (uint64_t)pt_every)
++      pt_print(frames);
++    p->next = pt_free;
++    pt_free = p;
++    os_unfair_lock_unlock(&pt_lock);
++  }
++}
++
++static void
++pt_command_buffer(id<MTLCommandBuffer> cb) {
++  struct pt_cb *p;
++  os_unfair_lock_lock(&pt_lock);
++  if (!pt_device) {
++    MTLTimestamp c = 0;
++    pt_device = [cb.device retain];
++    [pt_device sampleTimestamps:&c gpuTimestamp:&pt_g0];
++    pt_t0 = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
++    pt_trace_frame = (uint64_t)pt_every / 2;
++  }
++  p = pt_free;
++  if (p)
++    pt_free = p->next;
++  os_unfair_lock_unlock(&pt_lock);
++  if (!p) {
++    id<MTLCounterSet> set = nil;
++    p = calloc(1, sizeof *p);
++    for (id<MTLCounterSet> s in cb.device.counterSets)
++      if ([s.name isEqualToString:MTLCommonCounterSetTimestamp])
++        set = s;
++    if (set) {
++      MTLCounterSampleBufferDescriptor *d = [[MTLCounterSampleBufferDescriptor alloc] init];
++      NSError *err = nil;
++      d.counterSet = set;
++      d.sampleCount = PT_SAMPLES;
++      d.storageMode = MTLStorageModeShared;
++      p->buf = [cb.device newCounterSampleBufferWithDescriptor:d error:&err];
++      [d release];
++      if (!p->buf)
++        fprintf(stderr, "PASS-TIMES: no counter sample buffer: %s\n", err ? err.localizedDescription.UTF8String : "?");
++    } else
++      fprintf(stderr, "PASS-TIMES: the device has no timestamp counter set\n");
++  }
++  p->npass = p->nsample = 0;
++  p->frame = atomic_load(&pt_frames);
++  objc_setAssociatedObject(cb, &pt_key, [NSValue valueWithPointer:p], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
++  [cb addCompletedHandler:^(id<MTLCommandBuffer> c) {
++    pt_done(p, c);
++  }];
++}
++
++/* A new pass of the command buffer; *buf is the sample buffer to attach, nil if there is none. */
++static struct pt_pass *
++pt_new_pass(id<MTLCommandBuffer> cb, int kind, id<MTLCounterSampleBuffer> *buf) {
++  NSValue *v = objc_getAssociatedObject(cb, &pt_key);
++  struct pt_cb *p = v ? v.pointerValue : NULL;
++  unsigned need = kind == 0 ? 4 : 2;
++  *buf = nil;
++  if (!p || p->npass >= PT_PASSES)
++    return NULL;
++  struct pt_pass *q = &p->pass[p->npass++];
++  memset(q, 0, sizeof *q);
++  q->kind = (uint8_t)kind;
++  q->first = -1;
++  if (p->buf && p->nsample + need <= PT_SAMPLES) {
++    q->first = (int16_t)p->nsample;
++    p->nsample += need;
++    *buf = p->buf;
++  }
++  return q;
++}
++
+ void
+ execute_on_main(dispatch_block_t block) {
+   if ([NSThread isMainThread]) {
+@@ -110,6 +361,8 @@ static NTSTATUS
+ _MTLCommandQueue_commandBuffer(void *obj) {
+   struct unixcall_generic_obj_obj_ret *params = obj;
+   params->ret = (obj_handle_t)[(id<MTLCommandQueue>)params->handle commandBuffer];
++  if (pt_on() && params->ret)
++    pt_command_buffer((id<MTLCommandBuffer>)params->ret);
+   return STATUS_SUCCESS;
+ }
+ 
+@@ -404,6 +657,18 @@ _MTLDevice_newComputePipelineState(void *obj) {
+ static NTSTATUS
+ _MTLCommandBuffer_blitCommandEncoder(void *obj) {
+   struct unixcall_generic_obj_obj_ret *params = obj;
++  if (pt_on()) {
++    id<MTLCounterSampleBuffer> sb;
++    struct pt_pass *q = pt_new_pass((id<MTLCommandBuffer>)params->handle, 2, &sb);
++    MTLBlitPassDescriptor *d = [MTLBlitPassDescriptor blitPassDescriptor];
++    if (q && sb) {
++      d.sampleBufferAttachments[0].sampleBuffer = sb;
++      d.sampleBufferAttachments[0].startOfEncoderSampleIndex = (NSUInteger)q->first;
++      d.sampleBufferAttachments[0].endOfEncoderSampleIndex = (NSUInteger)q->first + 1;
++    }
++    params->ret = (obj_handle_t)[(id<MTLCommandBuffer>)params->handle blitCommandEncoderWithDescriptor:d];
++    return STATUS_SUCCESS;
++  }
+   params->ret = (obj_handle_t)[(id<MTLCommandBuffer>)params->handle blitCommandEncoder];
+   return STATUS_SUCCESS;
+ }
+@@ -411,6 +676,19 @@ _MTLCommandBuffer_blitCommandEncoder(void *obj) {
+ static NTSTATUS
+ _MTLCommandBuffer_computeCommandEncoder(void *obj) {
+   struct unixcall_generic_obj_uint64_obj_ret *params = obj;
++  if (pt_on()) {
++    id<MTLCounterSampleBuffer> sb;
++    struct pt_pass *q = pt_new_pass((id<MTLCommandBuffer>)params->handle, 1, &sb);
++    MTLComputePassDescriptor *d = [MTLComputePassDescriptor computePassDescriptor];
++    d.dispatchType = params->arg ? MTLDispatchTypeConcurrent : MTLDispatchTypeSerial;
++    if (q && sb) {
++      d.sampleBufferAttachments[0].sampleBuffer = sb;
++      d.sampleBufferAttachments[0].startOfEncoderSampleIndex = (NSUInteger)q->first;
++      d.sampleBufferAttachments[0].endOfEncoderSampleIndex = (NSUInteger)q->first + 1;
++    }
++    params->ret = (obj_handle_t)[(id<MTLCommandBuffer>)params->handle computeCommandEncoderWithDescriptor:d];
++    return STATUS_SUCCESS;
++  }
+   params->ret = (obj_handle_t)[(id<MTLCommandBuffer>)params->handle
+       computeCommandEncoderWithDispatchType:params->arg ? MTLDispatchTypeConcurrent : MTLDispatchTypeSerial];
+   return STATUS_SUCCESS;
+@@ -469,6 +747,36 @@ _MTLCommandBuffer_renderCommandEncoder(void *obj) {
+     descriptor.tileHeight = info->tile_height;
+   }
+ 
++  if (pt_on()) {
++    id<MTLCounterSampleBuffer> sb;
++    struct pt_pass *q = pt_new_pass((id<MTLCommandBuffer>)params->handle, 0, &sb);
++    if (q) {
++      id<MTLTexture> c0 = (id<MTLTexture>)info->colors[0].texture, dz = (id<MTLTexture>)info->depth.texture;
++      id<MTLTexture> any = c0 ? c0 : dz;
++      unsigned lvl = c0 ? info->colors[0].level : info->depth.level;
++      for (unsigned i = 0; i < 8; i++)
++        if (info->colors[i].texture)
++          q->ncolor++;
++      if (any) {
++        q->w = (uint16_t)MAX(1, any.width >> lvl);
++        q->h = (uint16_t)MAX(1, any.height >> lvl);
++        q->samples = (uint8_t)any.sampleCount;
++      }
++      q->fmt0 = c0 ? (uint16_t)c0.pixelFormat : 0;
++      q->fmtd = dz ? (uint16_t)dz.pixelFormat : 0;
++      q->acts = (uint8_t)((c0 ? (info->colors[0].load_action & 3) | (info->colors[0].store_action & 3) << 2 : 0) |
++                          (dz ? (info->depth.load_action & 3) << 4 | (info->depth.store_action & 3) << 6 : 0));
++      if (sb) {
++        MTLRenderPassSampleBufferAttachmentDescriptor *a = descriptor.sampleBufferAttachments[0];
++        a.sampleBuffer = sb;
++        a.startOfVertexSampleIndex = (NSUInteger)q->first;
++        a.endOfVertexSampleIndex = (NSUInteger)q->first + 1;
++        a.startOfFragmentSampleIndex = (NSUInteger)q->first + 2;
++        a.endOfFragmentSampleIndex = (NSUInteger)q->first + 3;
++      }
++    }
++  }
++
+   params->ret = (obj_handle_t)[(id<MTLCommandBuffer>)params->handle renderCommandEncoderWithDescriptor:descriptor];
+ 
+   [descriptor release];
+@@ -1307,6 +1615,8 @@ static NTSTATUS
+ _MTLCommandBuffer_presentDrawable(void *obj) {
+   struct unixcall_generic_obj_obj_noret *params = obj;
+   [(id<MTLCommandBuffer>)params->handle presentDrawable:(id<MTLDrawable>)params->arg];
++  if (pt_on())
++    atomic_fetch_add(&pt_frames, 1);
+   return STATUS_SUCCESS;
+ }
+ 
+@@ -1315,6 +1625,8 @@ _MTLCommandBuffer_presentDrawableAfterMinimumDuration(void *obj) {
+   struct unixcall_generic_obj_obj_double_noret *params = obj;
+   [(id<MTLCommandBuffer>)params->handle presentDrawable:(id<MTLDrawable>)params->arg0
+                                    afterMinimumDuration:params->arg1];
++  if (pt_on())
++    atomic_fetch_add(&pt_frames, 1);
+   return STATUS_SUCCESS;
+ }
+ 

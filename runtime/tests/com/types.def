@@ -1,0 +1,11 @@
+# The type names of the test-only interfaces (runtime/tests/com/desc), in the format of
+# runtime/com/types.def; runtime/tools/types.def is read first.
+@include rttest_com_types.h
+
+RTTEST_KIND      u32   #= enum
+RTTEST_DESC      void  #= struct
+IRtTestNamed     void  #= interface
+IRtTestShape     void  #= interface
+IRtTestCounter   void  #= interface
+IRtTestRoot   void #= interface
+IRtTestLeaf   void #= interface

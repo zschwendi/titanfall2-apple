@@ -1,0 +1,66 @@
+# Game files, anything derived from them, and build output never go in git.
+game/
+lifted/
+build/
+/inventory/
+*.dll
+*.exe
+*.vpk
+*.rpak
+*.starpak
+*.bsp
+*.bik
+*.mbnk
+*.mstr
+
+# The shared cache of lifted, compiled modules (tools/liftcache; lives in the main checkout)
+/.cache/
+
+# Local build products
+*.o
+*.a
+*.dylib
+*.dSYM/
+experiments/tso/tso_litmus
+experiments/tso/tso_litmus_ent
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+
+# Harness scratch
+harness/out/
+*.testcase
+*.result
+
+# Xcode per-user state
+xcuserdata/
+*.xcworkspace/
+
+# Compiled experiment binaries
+experiments/afp/afp_probe
+
+# Worker worktrees and swarm check logs
+.wt/
+swarm/logs/
+
+# Other projects cloned for reference or as dependencies (each keeps its own git history)
+/third_party/
+
+# Secrets: never commit.
+.env
+.env.*
+
+# The map of game data that is only partly on this machine (tools/gamedata; beside game/ in the main checkout)
+game.partial/
+/tools/publish/deny.local
+
+# The owner's reference PC (tools/gamedata/fetch.py, tools/trace, tools/hworacle): host=user@host, game=/path
+/.ref-host
+
+# This Mac's Apple signing identity (app/app.mk)
+/app/signing.local.mk
+
+# The links ./tfrecomp setup makes (a link is not a directory, so game/ and .venv/ above miss them)
+/game
+/.venv

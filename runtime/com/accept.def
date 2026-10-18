@@ -1,0 +1,31 @@
+# Methods that accept their arguments and return success, without a body file.
+#
+#     <Interface>::<Method>        # where the decision comes from
+#
+# <Interface> is a described interface, or a base of described interfaces (the line then
+# marks the slot in every described interface that inherits it).  The method must return
+# HRESULT (the thunk returns S_OK) or nothing; it checks that `this` is a live object, counts
+# the call and does nothing else.  A method with a body file cannot be listed, and neither can
+# QueryInterface, AddRef and Release.  runtime/tools/gen_com.py reads this file.
+#
+# A line here is a decision about what Direct3D does, so each one says where it comes from
+# (docs/handoff/design-null-device.md counted 55 candidates; unit d3d-contract decided 31:
+# docs/handoff/d3d-contract.md, section 7.  The 17 Set methods whose Get the game calls are NOT
+# here: they record what they are given).  tools/swarm/d3d_rows.py holds the same list as ACCEPT
+# and its --check compares the two.
+
+
+# The context's binds whose Get the game never calls, its draws and dispatches, its three clears
+# and Flush stood here until unit pic-seam (23 lines).  A renderer must see each of them, so each
+# has a body file now (runtime/nulldev/ID3D11DeviceContext/): two worked examples of the back-end
+# seam (DrawIndexed, ClearRenderTargetView) and 21 skeletons that do what the accept line did until
+# their back-end row is written (tools/swarm/back_rows.py; rt/d3dback.h).
+
+# S_OK: the device is never removed (MS: "S_OK" is the first of the possible results; from memory. F35: the native renderer returned 0)
+ID3D11Device::GetDeviceRemovedReason
+
+# S_OK; GetWindowAssociation is not among the 146, so nothing reads the flags back, and DXGI never sees a key or a window message here (MS; from memory)
+IDXGIFactory1::MakeWindowAssociation
+
+# S_OK; GetGammaControl is not among the 146 and there is no screen whose gamma could change (MS; from memory)
+IDXGIOutput::SetGammaControl

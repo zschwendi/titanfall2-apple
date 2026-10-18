@@ -1,0 +1,6 @@
+# Mismatches between the native and the lifted build that have been looked at and explained.
+# The driver reports them, does not fail on them, and says so when one stops happening.
+#
+#   file  name  class   # where it is written up
+#
+# class: lifter-bug | corpus-ub | abi-difference

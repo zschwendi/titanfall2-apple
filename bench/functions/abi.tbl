@@ -1,0 +1,86 @@
+# ---- abi.c: Windows x64 calling-convention shapes and control flow ----------------------------
+# Functions with float or double arguments or results are not described: the lifter does not
+# translate float code yet and the table has no float argument kind.  ab_fp_checked takes the
+# address of a function that is static in the corpus, which the driver cannot name.
+
+# more than four arguments: stack slots
+abi        ab_args6           call    u64   u64  u64  u64  u64  u64  u64
+abi        ab_args6_pass      call    u64   u64  u64  u64  u64  u64  u64
+abi        ab_args8           call    u64   u64  u64  u64  u64  u64  u64  u64  u64
+abi        ab_args_narrow     arith   u32   u8  i16  u32  i8  u16  u8  i32
+
+# structs by value: 1, 2, 3, 4, 12 and 16 bytes, as arguments and results
+abi        ab_s1_arg          arith   u32   s1a1  u32
+abi        ab_s1_ret          call    s1a1  u32
+abi        ab_s2_arg          arith   u32   s2a1  s2a1
+abi        ab_s2_ret          arith   s2a1  u32
+abi        ab_s3_arg          arith   u32   s3a1  u32
+abi        ab_s3_ret          arith   s3a1  u32
+abi        ab_s4_arg          arith   u32   s4a2  u32  buf=4
+abi        ab_s4_ret          arith   s4a2  u32
+abi        ab_s12_arg         arith   u64   s12a4  u64
+abi        ab_s12_ret         arith   s12a4 u32
+abi        ab_s12_swap        arith   s12a4 s12a4  u32
+abi        ab_s16_arg         arith   u64   s16a8  u64
+abi        ab_s16_ret         arith   s16a8 u64
+abi        ab_s16_add         arith   s16a8 s16a8  s16a8
+# AbS8 is { float; u32 }: 8 bytes, passed in one integer register on both ABIs.
+abi        ab_smix            call    u64   u32  s12a4  s8a4  s16a8  s3a1  s1a1
+
+# variadic functions
+abi        ab_va_bits         call    u64   u32  ...  u64  u64  u64  u64  u64
+abi        ab_va_fwd          call    u64   u32  u64  ...  u64  u64  u64
+abi        ab_va_many         call    u64   u32  u32  u32  u32  u32  ...  u64  u32
+abi        ab_va_bits_caller  call    u64   u64
+abi        ab_va_fwd_caller   call    u64   u64
+abi        ab_va_many_caller  call    u64   u64
+
+# calls through function pointers and tables of them
+abi        ab_fp_table        virtual u64   u32  u64  u64
+abi        ab_fp_all          call    u64   u64  u64
+abi        ab_fp_sret         virtual u64   u32  u32
+
+# recursion
+abi        ab_rec_tree        call    u64   u32  u64
+abi        ab_rec_stack       call    u64   u64  u64  u64  u64  u32
+abi        ab_ping            call    u32   u32  u32
+abi        ab_rec_struct      call    s16a8 u32  u64
+
+# tail calls
+abi        ab_tail6           call    u64   u64  u64  u64  u64  u64  u64
+abi        ab_tail_sret       call    s16a8 u64  u64
+abi        ab_tail_branch     call    u64   u64  u32
+abi        ab_tail_struct     call    u64   s12a4  u64
+
+# switches and computed goto
+abi        ab_sw64_dense      switch  u64   u64  u64
+abi        ab_sw_bittest      switch  u32   u32
+abi        ab_sw64_sparse     switch  u64   u64  u64
+abi        ab_sw_range        switch  u32   u32
+abi        ab_sw_chain        switch  i32   u16
+abi        ab_goto_tab        switch  u32   u32  u32
+abi        ab_goto_loop       switch  u64   buf=16  u32  u64
+
+# 128-bit integers: passed by pointer to a copy, returned in xmm0
+abi        ab_u128_add        arith   u128  u128  u128
+abi        ab_u128_mul        arith   u128  u128  u128
+abi        ab_u128_shl        arith   u128  u128  u32
+abi        ab_u128_shr        arith   u128  u128  u32
+abi        ab_u128_cmp        arith   u32   u128  u128
+abi        ab_u128_sub        arith   u128  u128  u64
+abi        ab_u128_addc       arith   u64   u128  u128  buf=8
+abi        ab_u128_accum      arith   void  buf=16  u128  u32
+
+# values live across calls
+abi        ab_press_int       call    u64   u64  u64  u64  u64  u64  u64  u64  u64
+
+# block copies, conditional selects, flag materialisation, address arithmetic
+abi        ab_copy32          mem     void  buf=32  buf=32
+abi        ab_s16_copy        mem     void  buf=16  buf=16
+abi        ab_sel_ne          arith   u64   u64:mask=3  u64:mask=3  u64  u64
+abi        ab_sel_ne_mem      arith   u64   buf=16:fill=small64  u64:lt=4  u64
+abi        ab_eq_reg          arith   u32   u64:mask=0x8000000000000001  u64:mask=0x8000000000000001
+abi        ab_eq_mem          arith   u32   buf=8:fill=small  u32:lt=4
+abi        ab_flags_pack      arith   u32   u32:lt=3  u32:pick=7|6  u32:lt=3
+abi        ab_lea_mix         arith   u64   u64  u64
+abi        ab_lea_idx         mem     u64   buf=32  u32

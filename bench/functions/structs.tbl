@@ -1,0 +1,15 @@
+# ---- structs.c: structs by value and by pointer, bitfields, linked data ----------------------
+structs    pt_add             call    s8a4  s8a4  s8a4
+structs    big_make           call    s24a8 i64  i64
+structs    big_sum            call    i64   s24a8
+structs    big_chain          call    s24a8 i64
+structs    rec_pack           mem     u64   buf=16
+structs    rec_fill           mem     void  buf=16  u32
+structs    bits_get           arith   u32   s4a4
+structs    bits_set           arith   s4a4  u32
+structs    list_sum           mem     i64   buf=256:fill=list16
+structs    list_build         mem     u32   buf=128  u32  i32
+structs    matrix_mul         mem     void  buf=36  buf=36  buf=36
+structs    table_lookup       mem     u32   u32
+structs    counter_bump       mem     i32   i32
+structs    name_char          mem     i8    u32  u32

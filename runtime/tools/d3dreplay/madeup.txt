@@ -1,0 +1,27 @@
+0 D3D11CreateDevice(pAdapter = NULL, DriverType = D3D_DRIVER_TYPE_HARDWARE, Software = NULL, Flags = 0x0, pFeatureLevels = NULL, FeatureLevels = 0, SDKVersion = 7, ppDevice = &0x1000, pFeatureLevel = &D3D_FEATURE_LEVEL_11_0, ppImmediateContext = &0x2000) = S_OK
+1 ID3D11Device5::QueryInterface(this = 0x1000, riid = IID_IDXGIDevice1, ppvObj = &0x1040) = S_OK
+2 IDXGIDevice4::GetParent(this = 0x1040, riid = IID_IDXGIAdapter1, ppParent = &0x3000) = S_OK
+3 IDXGIAdapter4::GetParent(this = 0x3000, riid = IID_IDXGIFactory1, ppParent = &0x4000) = S_OK
+4 IDXGIFactory7::EnumAdapters1(this = 0x4000, Adapter = 0, ppAdapter = &0x3100) = S_OK
+5 IDXGIAdapter4::EnumOutputs(this = 0x3100, Output = 0, ppOutput = &0x5000) = S_OK
+6 IDXGIOutput6::GetDisplayModeList(this = 0x5000, EnumFormat = DXGI_FORMAT_R8G8B8A8_UNORM, Flags = 0x0, pNumModes = &2, pDesc = NULL) = S_OK
+7 IDXGIOutput6::GetDisplayModeList(this = 0x5000, EnumFormat = DXGI_FORMAT_R8G8B8A8_UNORM, Flags = 0x0, pNumModes = &2, pDesc = {{Width = 640, Height = 480, RefreshRate = {Numerator = 60000, Denominator = 1000}, Format = DXGI_FORMAT_R8G8B8A8_UNORM, ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_PROGRESSIVE, Scaling = DXGI_MODE_SCALING_UNSPECIFIED}, {Width = 800, Height = 600, RefreshRate = {Numerator = 60000, Denominator = 1000}, Format = DXGI_FORMAT_R8G8B8A8_UNORM, ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_PROGRESSIVE, Scaling = DXGI_MODE_SCALING_UNSPECIFIED}}) = S_OK
+8 IDXGIOutput6::Release(this = 0x5000) = 0
+9 IDXGIAdapter4::EnumOutputs(this = 0x3100, Output = 1, ppOutput = ?) = DXGI_ERROR_NOT_FOUND
+10 IDXGIAdapter4::GetDesc(this = 0x3100, pDesc = &{Description = L"A made-up adapter", VendorId = 4660, DeviceId = 22136, SubSysId = 0, Revision = 0, DedicatedVideoMemory = 1073741824, DedicatedSystemMemory = 0, SharedSystemMemory = 1073741824, AdapterLuid = {LowPart = 1, HighPart = 0}}) = S_OK
+12 ID3D11Device5::GetImmediateContext(this = 0x1000, ppImmediateContext = &0x2000)
+18 ID3D11Device5::CreateSamplerState(this = 0x1000, pSamplerDesc = &{Filter = D3D11_FILTER_MIN_MAG_MIP_POINT, AddressU = D3D11_TEXTURE_ADDRESS_CLAMP, AddressV = D3D11_TEXTURE_ADDRESS_CLAMP, AddressW = D3D11_TEXTURE_ADDRESS_CLAMP, MipLODBias = 0, MaxAnisotropy = 1, ComparisonFunc = D3D11_COMPARISON_ALWAYS, BorderColor = {0, 0, 0, 0}, MinLOD = 0, MaxLOD = 3.402823e+38}, ppSamplerState = &0x6000) = S_OK
+19 ID3D11Device5::CreateSamplerState(this = 0x1000, pSamplerDesc = &{Filter = D3D11_FILTER_MIN_MAG_MIP_POINT, AddressU = D3D11_TEXTURE_ADDRESS_CLAMP, AddressV = D3D11_TEXTURE_ADDRESS_CLAMP, AddressW = D3D11_TEXTURE_ADDRESS_CLAMP, MipLODBias = 0, MaxAnisotropy = 1, ComparisonFunc = D3D11_COMPARISON_ALWAYS, BorderColor = {0, 0, 0, 0}, MinLOD = 0, MaxLOD = 3.402823e+38}, ppSamplerState = &0x6000) = S_OK
+20 ID3D11Device5::CreateBuffer(this = 0x1000, pDesc = &{ByteWidth = 112, Usage = D3D11_USAGE_DYNAMIC, BindFlags = D3D11_BIND_CONSTANT_BUFFER, CPUAccessFlags = D3D11_CPU_ACCESS_WRITE, MiscFlags = 0x0, StructureByteStride = 0}, pInitialData = NULL, ppBuffer = &0x7000) = S_OK
+21 ID3D11DeviceContext4::Map(this = 0x2000, pResource = 0x7000, Subresource = 0, MapType = D3D11_MAP_WRITE_DISCARD, MapFlags = 0x0, pMappedResource = &{pData = 0x90000, RowPitch = 112, DepthPitch = 112}) = S_OK
+22 memcpy(dest = 0x90010, src = blob(96), n = 96) // fake
+23 ID3D11DeviceContext4::Unmap(this = 0x2000, pResource = 0x7000, Subresource = 0)
+24 ID3D11Device5::CreateTexture2D(this = 0x1000, pDesc = &{Width = 4, Height = 4, MipLevels = 1, ArraySize = 1, Format = DXGI_FORMAT_R8G8B8A8_UNORM, SampleDesc = {Count = 1, Quality = 0}, Usage = D3D11_USAGE_IMMUTABLE, BindFlags = D3D11_BIND_SHADER_RESOURCE, CPUAccessFlags = 0x0, MiscFlags = 0x0}, pInitialData = &{pSysMem = blob(64), SysMemPitch = 16, SysMemSlicePitch = 64}, ppTexture2D = &0x8000) = S_OK
+25 ID3D11Device5::CreateShaderResourceView(this = 0x1000, pResource = 0x8000, pDesc = &{Format = DXGI_FORMAT_R8G8B8A8_UNORM, ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D, Texture2D = {MostDetailedMip = 0, MipLevels = 1}}, ppSRView = &0x8800) = S_OK
+26 ID3D11Device5::CreateVertexShader(this = 0x1000, pShaderBytecode = shader(vs_5_0, 12 lines), BytecodeLength = 464, pClassLinkage = NULL, ppVertexShader = &0x9000) = S_OK
+27 ID3D11Device5::CreateQuery(this = 0x1000, pQueryDesc = &{Query = D3D11_QUERY_EVENT, MiscFlags = 0x0}, ppQuery = &0xa000) = S_OK
+28 ID3D11DeviceContext4::End(this = 0x2000, pAsync = 0xa000)
+29 ID3D11DeviceContext4::GetData(this = 0x2000, pAsync = 0xa000, pData = NULL, DataSize = 0, GetDataFlags = 0x0) = S_FALSE
+30 ID3D11SamplerState::Release(this = 0x6000) = 1
+31 ID3D11SamplerState::Release(this = 0x6000) = 0
+32 ID3D11Device5::CreateSamplerState(this = 0x1000, pSamplerDesc = &{Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR, AddressU = D3D11_TEXTURE_ADDRESS_WRAP, AddressV = D3D11_TEXTURE_ADDRESS_WRAP, AddressW = D3D11_TEXTURE_ADDRESS_WRAP, MipLODBias = 0, MaxAnisotropy = 1, ComparisonFunc = D3D11_COMPARISON_ALWAYS, BorderColor = {0, 0, 0, 0}, MinLOD = 0, MaxLOD = 3.402823e+38}, ppSamplerState = &0x6000) = S_OK

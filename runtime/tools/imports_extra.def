@@ -1,0 +1,42 @@
+# Functions the planner has added to the work list that no game DLL imports by name: for
+# example the functions the C runtime asks GetProcAddress for at start-up
+# (docs/findings/24-import-surface.md, last section).
+#
+# Maintained by hand by the planner; workers never edit it.  Same format as imports.def:
+#
+#     <library> <name> <ordinal or -> <wave or -> <mark or ->
+#
+# Read by runtime/tools/check_shim.py: a shim must implement a function listed in
+# imports.def or here.
+#
+# XInput1_3.dll: loaded by name by inputsystem+0xedda, its three functions fetched with
+# GetProcAddress at inputsystem+0xcec7, +0xcee2, +0xcefd (docs/handoff/gate3-run-2.md, entry 2
+# and the "needed" table; brief of unit d3d-resources, item 1).
+xinput1_3.dll   XInputGetCapabilities                       -       -     -
+xinput1_3.dll   XInputGetState                              -       -     -
+xinput1_3.dll   XInputSetState                              -       -     -
+#
+# GFSDK_SSAO.win64.dll (stubbed): the one function materialsystem_dx11 imports from it, called
+# once at materialsystem_dx11+0x296dd (finding 31, section 6; brief of unit d3d-resources, item 7).
+gfsdk_ssao.win64.dll  GFSDK_SSAO_CreateContext_D3D11        -       -     -
+#
+# d3dcompiler_46.dll (stubbed; Microsoft's, shipped with the game, so the inventory counts its
+# imports as internal and imports.def does not list them): the two functions materialsystem_dx11
+# calls for a vertex shader it creates, at +0x323d8 and +0x2f519 (finding 31, section 7; unit
+# d3d-reflect).
+d3dcompiler_46.dll    D3DReflect                            -       -     -
+d3dcompiler_46.dll    D3DGetBlobPart                        -       -     -
+#
+# user32.dll, raw input: the input system fetches both with GetProcAddress (inputsystem+0x783a,
+# +0x7855) and calls RegisterRawInputDevices once at inputsystem+0x6c77 and GetRawInputData once
+# per WM_INPUT (docs/handoff/gate3-run-3.md, section 5; rows raw-input-register, raw-input-data
+# of tools/swarm/shim_rows_census.py, unit rt-census-rows).
+user32.dll      RegisterRawInputDevices                     -       -     -
+user32.dll      GetRawInputData                             -       -     -
+#
+# dsound.dll: the engine fetches this one function with GetProcAddress and calls it once at
+# engine+0xbff8 (docs/reviews/census-rows.md 1.8).  The orchestrator decided on 12 October 2026
+# that the module exists and the function answers "no capture device" (dsound-capture).
+dsound.dll      DirectSoundCaptureCreate                    -       -     -
+dsound.dll      DirectSoundCreate                           -       -     -
+dsound.dll      DirectSoundEnumerateA                       -       -     -

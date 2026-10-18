@@ -1,0 +1,418 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tfrecomp <tfrecomp@example.invalid>
+Date: Mon, 12 Oct 2026 00:12:01 -0400
+Subject: [PATCH 04/12] native: the host program hears the log and the reason
+ for an abort
+
+A program that loads DXMT's libraries itself has no Wine console and may
+not be reading DXMT's log file.  New header
+include/native/dxmt_native_host.h: the host registers a log function and
+an abort function, once, in winemetal.dylib (new file
+src/nativemetal/host_hooks.c), which dxgi and d3d11 both link against.
+
+The logger (one copy, in dxgi.dylib; d3d11 calls that copy) hands every
+line to the log function before it writes it; a non-zero answer means
+"do not write it".  Error lines reach the function even when
+DXMT_LOG_LEVEL would drop them.
+
+DXMTHostAbort(message) calls the abort function and then abort().  It
+replaces the bare abort() of UNIMPLEMENTED (19 sites), of _massert
+(D3D11_ASSERT), of the pure-virtual handler, of the swap chain
+constructor and of the internal command library.  winemetal.dylib also
+defines __assert_rtn, which Apple's assert() calls, so that in a build
+with assertions a failed assert() of any of the three libraries goes the
+same way instead of straight into libSystem's abort().
+
+Two debug-level lines in the shader compile task ("Shader variant from
+cache", "Shader variant converted") let a host count how much of a run
+was served by the shader cache.
+
+Wine builds are unchanged: util_host.hpp gives them an abort() and a log
+function that does nothing.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ include/native/dxmt_native_host.h | 90 +++++++++++++++++++++++++++++++
+ src/d3d11/d3d11.cpp               |  7 ++-
+ src/d3d11/d3d11_private.h         |  4 +-
+ src/d3d11/d3d11_shader.cpp        |  4 ++
+ src/d3d11/d3d11_swapchain.cpp     |  2 +-
+ src/dxmt/dxmt_command.cpp         |  3 +-
+ src/nativemetal/host_hooks.c      | 72 +++++++++++++++++++++++++
+ src/nativemetal/meson.build       |  1 +
+ src/util/log/log.cpp              | 18 ++++++-
+ src/util/util_host.hpp            | 20 +++++++
+ 10 files changed, 214 insertions(+), 7 deletions(-)
+ create mode 100644 include/native/dxmt_native_host.h
+ create mode 100644 src/nativemetal/host_hooks.c
+ create mode 100644 src/util/util_host.hpp
+
+diff --git a/include/native/dxmt_native_host.h b/include/native/dxmt_native_host.h
+new file mode 100644
+index 0000000..0daf83a
+--- /dev/null
++++ b/include/native/dxmt_native_host.h
+@@ -0,0 +1,90 @@
++/*
++ * What the host program hears from DXMT's native (no Wine) build.
++ *
++ * A program that loads DXMT's libraries itself has no Wine console to read
++ * and may not be looking at DXMT's log file.  It can register two functions:
++ *
++ *  - a log function, called for every line DXMT logs, before DXMT writes the
++ *    line anywhere;
++ *  - an abort function, called with the reason just before DXMT ends the
++ *    process with abort().
++ *
++ * One registration covers dxgi.dylib, d3d11.dylib and winemetal.dylib: the
++ * registered pointers live in winemetal.dylib, which the other two link
++ * against, and all four functions below are exported from it
++ * (dlsym(handle of winemetal.dylib, "DXMTSetHostLogFunction"), or
++ * RTLD_DEFAULT when the libraries were opened RTLD_GLOBAL).
++ *
++ * Rules for the host:
++ *  - Register before the first call into DXGI or Direct3D.  Registering
++ *    later is allowed; lines logged before that are not repeated.  Passing
++ *    NULL removes a function.
++ *  - Both functions are called on whatever thread DXMT is on at that moment:
++ *    a thread of the host that is inside a DXGI or Direct3D call, or one of
++ *    DXMT's own threads (command encoding, GPU completion, shader
++ *    compilation).  The log function is called with DXMT's logger locked, so
++ *    one call at a time; the abort function can be entered by two threads at
++ *    once if two fail at once.
++ *  - Neither function may call into DXGI or Direct3D.  Neither may assume
++ *    that DXMT's objects are in a usable state.
++ *  - Which lines the log function gets: the lines DXMT_LOG_LEVEL lets through
++ *    (default: info and above), and every error line whatever DXMT_LOG_LEVEL
++ *    says (so DXMT_LOG_LEVEL=none silences DXMT's own output and not the
++ *    host's view of errors).
++ *  - What reaches the abort function: UNIMPLEMENTED paths of d3d11, failed
++ *    assertions (in a build with assertions: D3D11_ASSERT and the C assert()
++ *    of all three libraries), a pure virtual call, a swap chain whose layer
++ *    could not be attached, a failure to load DXMT's internal Metal library.
++ *    Not everything: abort(), std::terminate() and traps reached any other
++ *    way (an uncaught C++ exception, LLVM's own fatal errors, a failed
++ *    reference-count check) arrive as SIGABRT or SIGTRAP with no call here.
++ *    A host that must report every death installs handlers for those too.
++ */
++
++#ifndef DXMT_NATIVE_HOST_H
++#define DXMT_NATIVE_HOST_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* Levels, as DXMT's logger numbers them (DXMT_LOG_LEVEL's names). */
++#define DXMT_HOST_LOG_TRACE 0
++#define DXMT_HOST_LOG_DEBUG 1
++#define DXMT_HOST_LOG_INFO 2
++#define DXMT_HOST_LOG_WARN 3
++#define DXMT_HOST_LOG_ERROR 4
++
++/*
++ * One logged line: no level prefix, no newline, valid only during the call.
++ * A message of several lines arrives as several calls.
++ * Return 0 and DXMT goes on to write the line to standard error and to its
++ * log file as it always did; return non-zero and DXMT writes it nowhere.
++ */
++typedef int (*DXMTHostLogFunction)(void *user, int level, const char *line);
++
++/*
++ * DXMT is about to call abort().  `message` says why (for example
++ * "d3d11_context_imm.cpp:Map: "map-on-default: map"." or
++ * "Assertion failed: (expr), function f, file x.cpp, line 12.") and is valid
++ * only during the call.  The function may end the process itself; if it
++ * returns, DXMT calls abort().
++ */
++typedef void (*DXMTHostAbortFunction)(void *user, const char *message);
++
++void DXMTSetHostLogFunction(DXMTHostLogFunction function, void *user);
++void DXMTSetHostAbortFunction(DXMTHostAbortFunction function, void *user);
++
++/*
++ * For DXMT's own code, not for the host.
++ * DXMTHostLog returns what the host's function returned, 0 without one.
++ * DXMTHostAbort calls the host's function, if any, and then abort().
++ */
++int DXMTHostLog(int level, const char *line);
++void DXMTHostAbort(const char *message) __attribute__((noreturn));
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* DXMT_NATIVE_HOST_H */
+diff --git a/src/d3d11/d3d11.cpp b/src/d3d11/d3d11.cpp
+index 9d1122c..f526230 100644
+--- a/src/d3d11/d3d11.cpp
++++ b/src/d3d11/d3d11.cpp
+@@ -23,6 +23,7 @@
+ #include "d3d11_device.hpp"
+ #include "log/log.hpp"
+ #include "util_string.hpp"
++#include "util_host.hpp"
+ #include "dxmt_capture.hpp"
+ #include <exception>
+ 
+@@ -244,12 +245,14 @@ extern "C" void _massert(const char *_Message, const char *_File,
+                          unsigned _Line) {
+   dxmt::Logger::err(dxmt::str::format("Assertion failed: ", _Message,
+                                       "\nfile: ", _File, ":", _Line));
+-  std::terminate();
++  DXMTHostAbort(dxmt::str::format("Assertion failed: ", _Message, ", file ",
++                                  _File, ":", _Line)
++                    .c_str());
+ }
+ 
+ extern "C" void __cxa_pure_virtual() {
+   dxmt::Logger::err(dxmt::str::format("Pure virtual function called"));
+ #ifndef NDEBUG
+-  __builtin_trap();
++  DXMTHostAbort("Pure virtual function called");
+ #endif
+ }
+\ No newline at end of file
+diff --git a/src/d3d11/d3d11_private.h b/src/d3d11/d3d11_private.h
+index 96fb723..ea620ea 100644
+--- a/src/d3d11/d3d11_private.h
++++ b/src/d3d11/d3d11_private.h
+@@ -1,5 +1,7 @@
+ #pragma once
+ 
++#include "util_host.hpp"
++
+ extern "C" void _massert (const char *_Message, const char *_File, unsigned _Line) __attribute__((noreturn));
+ 
+ #ifdef NDEBUG
+@@ -13,7 +15,7 @@ extern "C" void _massert (const char *_Message, const char *_File, unsigned _Lin
+ 
+ #define UNIMPLEMENTED(text)                                                                                            \
+   Logger::err(str::format(__FILE__, ":", __FUNCTION__, ": ", #text, "."));                                             \
+-  abort();                                                                                                             \
++  DXMTHostAbort(str::format(__FILE__, ":", __FUNCTION__, ": ", #text, ".").c_str());                                   \
+   __builtin_unreachable();
+ 
+ #define UNREACHABLE                                                                                                    \
+diff --git a/src/d3d11/d3d11_shader.cpp b/src/d3d11/d3d11_shader.cpp
+index e11d16c..5d45a9c 100644
+--- a/src/d3d11/d3d11_shader.cpp
++++ b/src/d3d11/d3d11_shader.cpp
+@@ -67,6 +67,9 @@ public:
+         lib_data = nullptr;
+         break;
+       }
++      // debug level, one line per variant: a host program counts these two
++      // lines to tell a warm shader cache from a cold one
++      DEBUG("Shader variant from cache: ", func_name);
+       break;
+     }
+ 
+@@ -88,6 +91,7 @@ public:
+       }
+ 
+       shader_->update_cached_variant(variant_digest_, lib_data);
++      DEBUG("Shader variant converted: ", func_name);
+ 
+       SM50DestroyBitcode(compile_result);
+       function_ = library.newFunction(func_name.c_str());
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index 21b4f48..a1c9032 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -136,7 +136,7 @@ public:
+ 
+     if (!native_view_) {
+       ERR("Failed to create metal view, it seems like your Wine has no exported symbols needed by DXMT.");
+-      abort();
++      DXMTHostAbort("Failed to create metal view for the swap chain's window");
+     }
+ 
+     if constexpr (EnableMetalFX) {
+diff --git a/src/dxmt/dxmt_command.cpp b/src/dxmt/dxmt_command.cpp
+index 6498ae1..729e752 100644
+--- a/src/dxmt/dxmt_command.cpp
++++ b/src/dxmt/dxmt_command.cpp
+@@ -2,6 +2,7 @@
+ #include "Metal.hpp"
+ #include "dxmt_context.hpp"
+ #include "dxmt_format.hpp"
++#include "util_host.hpp"
+ 
+ #include "dxmt_command.h"
+ 
+@@ -17,7 +18,7 @@ InternalCommandLibrary::InternalCommandLibrary(WMT::Device device) {
+ 
+   if (error) {
+     ERR("Failed to create internal command library: ", error.description().getUTF8String());
+-    abort();
++    DXMTHostAbort("Failed to create internal command library");
+   }
+ };
+ 
+diff --git a/src/nativemetal/host_hooks.c b/src/nativemetal/host_hooks.c
+new file mode 100644
+index 0000000..3fa5e0e
+--- /dev/null
++++ b/src/nativemetal/host_hooks.c
+@@ -0,0 +1,72 @@
++/*
++ * The host program's log and abort functions in a native (no Wine) build.
++ * See include/native/dxmt_native_host.h.
++ *
++ * This file is part of winemetal.dylib because that is the one library every
++ * other DXMT library links against: dxgi and d3d11 each carry or borrow a
++ * copy of the logger, and one registration has to reach all of them.
++ */
++
++#include <stdatomic.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++#include "native/dxmt_native_host.h"
++
++static _Atomic(DXMTHostLogFunction) host_log_function;
++static _Atomic(void *) host_log_user;
++static _Atomic(DXMTHostAbortFunction) host_abort_function;
++static _Atomic(void *) host_abort_user;
++
++void
++DXMTSetHostLogFunction(DXMTHostLogFunction function, void *user) {
++  atomic_store(&host_log_function, NULL);
++  atomic_store(&host_log_user, user);
++  atomic_store(&host_log_function, function);
++}
++
++void
++DXMTSetHostAbortFunction(DXMTHostAbortFunction function, void *user) {
++  atomic_store(&host_abort_function, NULL);
++  atomic_store(&host_abort_user, user);
++  atomic_store(&host_abort_function, function);
++}
++
++int
++DXMTHostLog(int level, const char *line) {
++  DXMTHostLogFunction function = atomic_load(&host_log_function);
++  if (!function)
++    return 0;
++  return function(atomic_load(&host_log_user), level, line);
++}
++
++void
++DXMTHostAbort(const char *message) {
++  DXMTHostAbortFunction function = atomic_load(&host_abort_function);
++  if (function)
++    function(atomic_load(&host_abort_user), message ? message : "");
++  abort();
++}
++
++/*
++ * A failed assert() in a build with assertions.  Apple's <assert.h> expands
++ * assert(e) to a call of __assert_rtn, which libSystem defines: it prints the
++ * expression and calls abort(), and the host would learn only of a SIGABRT.
++ * Defined and exported here, the name is found in winemetal.dylib first by
++ * this library and by every library that links against it (dxgi, d3d11), so
++ * their assertions go through the host's abort function with the text.
++ * Programs that do not link winemetal.dylib (the airconv tool) keep
++ * libSystem's.
++ */
++void
++__assert_rtn(const char *function, const char *file, int line, const char *expression) {
++  char message[1024];
++  if (function)
++    snprintf(message, sizeof(message), "Assertion failed: (%s), function %s, file %s, line %d.", expression, function,
++             file, line);
++  else
++    snprintf(message, sizeof(message), "Assertion failed: (%s), file %s, line %d.", expression, file, line);
++  fprintf(stderr, "%s\n", message);
++  fflush(stderr);
++  DXMTHostAbort(message);
++}
+diff --git a/src/nativemetal/meson.build b/src/nativemetal/meson.build
+index 2c037f8..8f0b1a7 100644
+--- a/src/nativemetal/meson.build
++++ b/src/nativemetal/meson.build
+@@ -2,6 +2,7 @@ winemetal_src = [
+   '../winemetal/winemetal_thunks.c',
+   '../winemetal/unix/winemetal_unix.c',
+   '../winemetal/unix/cache.c',
++  'host_hooks.c',
+ ]
+ winemetal_link_depends = []
+ 
+diff --git a/src/util/log/log.cpp b/src/util/log/log.cpp
+index 96ced95..f9befc3 100644
+--- a/src/util/log/log.cpp
++++ b/src/util/log/log.cpp
+@@ -14,6 +14,7 @@
+ #include "log.hpp"
+ 
+ #include "../util_env.hpp"
++#include "../util_host.hpp"
+ #include "util_string.hpp"
+ 
+ namespace dxmt {
+@@ -48,7 +49,16 @@ void Logger::log(LogLevel level, const std::string &message) {
+ }
+ 
+ void Logger::emitMsg(LogLevel level, const std::string &message) {
+-  if (level >= m_minLevel) {
++  // DXMT writes the lines DXMT_LOG_LEVEL lets through; a host program's log
++  // function (native build) gets those and, in addition, every error line.
++  const bool write = level >= m_minLevel;
++#ifndef _WIN32
++  const bool host_only = !write && level == LogLevel::Error;
++#else
++  const bool host_only = false;
++#endif
++
++  if (write || host_only) {
+     std::lock_guard<dxmt::mutex> lock(m_mutex);
+ 
+     static std::array<const char *, 5> s_prefixes = {
+@@ -56,7 +66,7 @@ void Logger::emitMsg(LogLevel level, const std::string &message) {
+ 
+     const char *prefix = s_prefixes.at(static_cast<uint32_t>(level));
+ 
+-    if (!std::exchange(m_initialized, true)) {
++    if (write && !std::exchange(m_initialized, true)) {
+ #ifdef _WIN32
+       HMODULE ntdll = GetModuleHandleA("ntdll.dll");
+ 
+@@ -74,6 +84,10 @@ void Logger::emitMsg(LogLevel level, const std::string &message) {
+     std::string line;
+ 
+     while (std::getline(stream, line, '\n')) {
++      // the host hears the line first; a non-zero answer means "do not write it"
++      if (DXMTHostLog(static_cast<int>(level), line.c_str()) || host_only)
++        continue;
++
+       std::stringstream outstream;
+       outstream << prefix << line << std::endl;
+ 
+diff --git a/src/util/util_host.hpp b/src/util/util_host.hpp
+new file mode 100644
+index 0000000..af825d4
+--- /dev/null
++++ b/src/util/util_host.hpp
+@@ -0,0 +1,20 @@
++#pragma once
++
++/*
++ * The host program's log and abort functions (native build only):
++ * include/native/dxmt_native_host.h, defined in src/nativemetal/host_hooks.c.
++ * Under Wine there is no host program and both do what DXMT always did.
++ */
++
++#ifndef _WIN32
++
++#include "native/dxmt_native_host.h"
++
++#else
++
++#include <stdlib.h>
++
++static inline int DXMTHostLog(int, const char *) { return 0; }
++[[noreturn]] static inline void DXMTHostAbort(const char *) { abort(); }
++
++#endif

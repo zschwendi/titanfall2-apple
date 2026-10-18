@@ -1,0 +1,43 @@
+"""Hand-written test vectors of the atomics family: xchg, xadd, cmpxchg, cmpxchg16b.
+
+(rva, hex bytes, assembly as the decoder prints it).  Layout and rules: tests/vectors/__init__.py.
+"""
+
+VECTORS = [
+    (0x27d0, "86c4", "xchg ah, al"),
+    (0x27e0, "87ca", "xchg edx, ecx"),
+    (0x27f0, "4991", "xchg r9, rax"),
+    (0x2800, "870b", "xchg dword ptr [rbx], ecx"),
+    (0x2810, "488715e9570000", "xchg qword ptr [rip + 0x57e9], rdx"),
+    (0x2820, "8603", "xchg byte ptr [rbx], al"),
+    (0x2830, "66870b", "xchg word ptr [rbx], cx"),
+    (0x2840, "4190", "xchg r8d, eax"),
+    (0x2850, "0fc0c8", "xadd al, cl"),
+    (0x2860, "0fc1c8", "xadd eax, ecx"),
+    (0x2870, "480fc1c0", "xadd rax, rax"),
+    (0x2880, "0fc10b", "xadd dword ptr [rbx], ecx"),
+    (0x2890, "f00fc10b", "lock xadd dword ptr [rbx], ecx"),
+    (0x28a0, "f0480fc11557570000", "lock xadd qword ptr [rip + 0x5757], rdx"),
+    (0x28b0, "f00fc00b", "lock xadd byte ptr [rbx], cl"),
+    (0x28c0, "66f00fc10b", "lock xadd word ptr [rbx], cx"),
+    (0x28d0, "0fb0d1", "cmpxchg cl, dl"),
+    (0x28e0, "0fb1d1", "cmpxchg ecx, edx"),
+    (0x28f0, "480fb1d1", "cmpxchg rcx, rdx"),
+    (0x2900, "660fb1d1", "cmpxchg cx, dx"),
+    (0x2910, "0fb10b", "cmpxchg dword ptr [rbx], ecx"),
+    (0x2920, "0fb1d0", "cmpxchg eax, edx"),
+    (0x2930, "f00fb10b", "lock cmpxchg dword ptr [rbx], ecx"),
+    (0x2940, "f0480fb10b", "lock cmpxchg qword ptr [rbx], rcx"),
+    (0x2950, "f00fb00b", "lock cmpxchg byte ptr [rbx], cl"),
+    (0x2960, "66f00fb10b", "lock cmpxchg word ptr [rbx], cx"),
+    (0x2970, "f00fb11588560000", "lock cmpxchg dword ptr [rip + 0x5688], edx"),
+    (0x2980, "f0480fc70b", "lock cmpxchg16b xmmword ptr [rbx]"),
+    (0x2990, "480fc70b", "cmpxchg16b xmmword ptr [rbx]"),
+    (0x3da0, "f0480fb11572420000", "lock cmpxchg qword ptr [rip + 0x4272], rdx"),
+    (0x3db0, "870577420000", "xchg dword ptr [rip + 0x4277], eax"),
+    (0x3dd0, "f0480fc11570420000", "lock xadd qword ptr [rip + 0x4270], rdx"),
+    (0x3e20, "46876474f8", "xchg dword ptr [rsp + r14*2 - 8], r12d"),
+    (0x3e30, "f00fc1548b08", "lock xadd dword ptr [rbx + rcx*4 + 8], edx"),
+    (0x3e40, "f0480fb14c2420", "lock cmpxchg qword ptr [rsp + 0x20], rcx"),
+    (0x3e50, "f0480fc74c2430", "lock cmpxchg16b xmmword ptr [rsp + 0x30]"),
+]

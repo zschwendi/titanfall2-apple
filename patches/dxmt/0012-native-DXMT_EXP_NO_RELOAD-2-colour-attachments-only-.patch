@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tfrecomp <tfrecomp@example.invalid>
+Date: Wed, 14 Oct 2026 02:26:21 -0400
+Subject: [PATCH 12/12] native: DXMT_EXP_NO_RELOAD=2, colour attachments only
+ (an experiment, off unless set)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/winemetal/unix/winemetal_unix.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
+index 02ed2f1..a350620 100644
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -257,7 +257,8 @@ pt_command_buffer(id<MTLCommandBuffer> cb) {
+  *   DXMT_EXP_SCISSOR=2  the same for passes with three or more colour targets only (the scene).
+  *   DXMT_EXP_SAMPLER=1  every sampler without anisotropy; =2 never finer than mip level 2; =3 both.
+  *   DXMT_EXP_NO_RELOAD=1  a colour, depth or stencil attachment whose load action is Load is not
+- *                       loaded (DontCare): the cost of reloading targets between passes. */
++ *                       loaded (DontCare): the cost of reloading targets between passes.  =2: colour
++ *                       attachments only (with depth not reloaded the depth test, and so the work, changes). */
+ static int
+ exp_env(const char *name) {
+   const char *e = getenv(name);
+@@ -804,6 +805,8 @@ _MTLCommandBuffer_renderCommandEncoder(void *obj) {
+     for (unsigned i = 0; i < 8; i++)
+       if (descriptor.colorAttachments[i].loadAction == MTLLoadActionLoad)
+         descriptor.colorAttachments[i].loadAction = MTLLoadActionDontCare;
++  }
++  if (exp_no_reload == 1) { /* =2: colour only, so that the depth test (and with it the work) stays the same */
+     if (descriptor.depthAttachment.loadAction == MTLLoadActionLoad)
+       descriptor.depthAttachment.loadAction = MTLLoadActionDontCare;
+     if (descriptor.stencilAttachment.loadAction == MTLLoadActionLoad)

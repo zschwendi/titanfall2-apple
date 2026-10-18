@@ -1,0 +1,95 @@
+# ---- cpp2.cpp: C++ object-model shapes as the Microsoft ABI lays them out ---------------------
+# kind is `virtual` where the x86 code still makes an indirect call after optimisation, `arith`
+# or `mem` where the compiler folded the object away, `call` where direct calls remain.
+# Object layout (vtable pointers, virtual-base tables, member-pointer representation) differs
+# between the Microsoft ABI of the lifted side and the Itanium ABI of the native side, so a
+# buffer that receives an object with a vtable is marked nocmp and only results are compared.
+
+# multiple inheritance
+cpp2       cx_mi_first_base   arith   u32   u32  u32
+cpp2       cx_mi_second_base  arith   u32   u32  u32
+cpp2       cx_mi_pick         virtual u32   u32  u32  u32
+cpp2       cx_mi_downcast     arith   u32   u32  u32
+cpp2       cx_mi_crosscast    arith   u32   u32  u32
+cpp2       cx_mi_store        mem     u32   buf=8  u32  u32
+
+# virtual inheritance
+cpp2       cx_vb_fields       arith   u32   u32  u32  u32
+cpp2       cx_vb_call         arith   u32   u32  u32
+cpp2       cx_vb_pick         arith   u32   u32  u32  u32
+cpp2       cx_vb_write        arith   u32   u32  u32
+cpp2       cx_vb_store        mem     u32   buf=8  u32  u32
+
+# pointers to member functions
+cpp2       cx_pmf_pick        virtual u32   u32  u32  u32
+cpp2       cx_pmf_table       virtual u32   u32  u32  u32
+cpp2       cx_pmf_virtual     virtual u32   u32  u32
+cpp2       cx_pmf_store       virtual u32   buf=8  u32  u32
+cpp2       cx_pmf_derived     virtual u32   u32  u32  u32
+cpp2       cx_pmf_mi_base     virtual u32   u32  u32
+cpp2       cx_pmf_mi_pick     virtual u32   u32  u32  u32
+cpp2       cx_pmf_compare     arith   u32   u32  u32
+
+# pointers to data members
+cpp2       cx_pdm_read        arith   u32   u32  u32  u32
+cpp2       cx_pdm_write       mem     u32   buf=8  u32  u32
+cpp2       cx_pdm_swap        mem     u32   buf=8  u32
+cpp2       cx_pdm_table       arith   u32   u32  u32  u32
+cpp2       cx_pdm_base        arith   u32   u32  u32
+
+# abstract interfaces
+cpp2       cx_iface_pick      virtual u32   u32  u32  u32
+cpp2       cx_iface_all       arith   u32   u32  u32
+cpp2       cx_iface_ref       virtual u32   u32  u32  u32
+cpp2       cx_iface_arg       virtual u32   u32  u32  u32
+cpp2       cx_iface_store     mem     u32   buf=8  u32  u32
+
+# templates (the float and double instantiations are not described)
+cpp2       cx_tpl_sum_u8      mem     u32   buf=4
+cpp2       cx_tpl_sum_i16     mem     u32   buf=8
+cpp2       cx_tpl_sum_u32     mem     u32   buf=16
+cpp2       cx_tpl_sum_u64     mem     u64   buf=32
+cpp2       cx_tpl_dot_u32     mem     u32   buf=16  buf=16
+cpp2       cx_tpl_dot_u8      mem     u32   buf=8  buf=8
+cpp2       cx_tpl_clamp_i32   arith   i32   i32  i32  i32
+cpp2       cx_tpl_clamp_i64   arith   i64   i64  i64  i64
+cpp2       cx_tpl_fold_u32    arith   u32   u32  u32
+cpp2       cx_tpl_fold_u64    arith   u64   u64  u32
+cpp2       cx_tpl_apply_u32   call    u32   u32
+
+# lambdas
+cpp2       cx_lam_capture_tpl arith   u32   u32  u32
+cpp2       cx_lam_capture_ref arith   u32   u32  u32
+cpp2       cx_lam_fnptr       arith   u32   u32
+cpp2       cx_lam_ctx         call    u32   u32  u32
+cpp2       cx_lam_out         mem     u32   buf=4  u32  u32
+cpp2       cx_lam_nested      arith   u32   u32  u32
+cpp2       cx_lam_mutable     arith   u32   u32
+
+# operator overloads on small vector types
+cpp2       cx_v2_arith        arith   u32   u32  u32  u32  u32
+cpp2       cx_v2_dot          arith   u32   u32:mask=0x80000003  u32:mask=0x80000003  u32:mask=0x80000003  u32:mask=0x80000003
+cpp2       cx_v2_scalar_left  arith   u32   u32  u32
+cpp2       cx_v2_compound     arith   u32   u32  u32  u32
+cpp2       cx_v2_store        mem     u32   buf=8  u32  u32
+cpp2       cx_v2_array_sum    mem     u32   buf=64  u32
+cpp2       cx_v4_add          mem     u32   buf=16  buf=16  buf=16
+cpp2       cx_v4_bias         mem     u32   buf=16  u32
+cpp2       cx_v4_bias_xor     mem     u32   buf=16  u32
+
+# placement construction into a caller-supplied buffer
+cpp2       cx_place_acc       mem     u32   buf=16  u32  u32
+cpp2       cx_place_pair      mem     u32   buf=24  u32  u32
+cpp2       cx_place_mi        mem     u32   buf=64:nocmp  u32  u32
+cpp2       cx_place_vb        mem     u32   buf=96:nocmp  u32  u32
+cpp2       cx_place_units     virtual u32   buf=32:nocmp  u32  u32  u32
+cpp2       cx_place_loop      mem     u32   buf=64  u32
+
+# covariant returns, virtual calls in constructors, copies, conversions, chained builders
+cpp2       cx_cov_next        arith   u32   u32  u32  u32
+cpp2       cx_cov_direct      arith   u32   u32  u32  u32
+cpp2       cx_ctor_virtual    arith   u32   u32
+cpp2       cx_copy_ctor       call    u32   u32  u32
+cpp2       cx_conv_op         arith   u32   u32
+cpp2       cx_builder         arith   u32   u32  u32
+cpp2       cx_static_member   arith   u32   u32  u32

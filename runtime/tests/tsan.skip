@@ -1,0 +1,18 @@
+# Tests that make rt-test-tsan does not run, each with its reason (review finding R24).
+# A line is `lib/Name  reason`.  The reasons are ThreadSanitizer's, not the code's: its
+# allocator replaces the system's, and its shadow memory occupies addresses the tests expect
+# to be free.
+core/handle_object_new                                  asks for a huge block; the sanitizer's allocator aborts instead of returning NULL
+core/heap_alloc_failure_boundaries                      asks for a huge block; the sanitizer's allocator aborts instead of returning NULL
+core/heap_block_above_the_address_limit_is_fatal        depends on what the system's malloc zone answers; the sanitizer replaces the zone
+core/heap_block_of_another_heap_is_fatal                depends on what the system's malloc zone answers; the sanitizer replaces the zone
+core/heap_destroy_gives_the_memory_back                 depends on what the system's malloc zone answers; the sanitizer replaces the zone
+core/heap_fixed_size_in_place_growth_is_charged         depends on what the system's malloc zone answers; the sanitizer replaces the zone
+core/heap_overwritten_header_is_fatal                   depends on what the system's malloc zone answers; the sanitizer replaces the zone
+core/heap_realloc_zero_memory_zeroes_exactly_the_growth depends on what the system's malloc zone answers; the sanitizer replaces the zone
+core/heap_threads_double_free_is_caught                 depends on what the system's malloc zone answers; the sanitizer replaces the zone
+core/vm_alloc_address_limits                            expects 0x7fffffef000 to be free; the sanitizer has mapped it
+core/vm_free_bad_arguments                              expects 0x7fffffef000 to be free; the sanitizer has mapped it
+core/vm_protect_bad_arguments                           expects 0x7fffffef000 to be free; the sanitizer has mapped it
+kernel32/HeapFree                                       depends on what the system's malloc zone answers; the sanitizer replaces the zone
+core/registry_save_killed_mid_write                     kills a child after at most 32 ms and needs three kills in the middle of a save; the sanitizer's child is not that far

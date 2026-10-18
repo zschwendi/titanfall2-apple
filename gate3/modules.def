@@ -1,0 +1,52 @@
+# The modules of the Gate 3 driver (gate3/driver.c), in the format of runtime/modules.def.
+#
+# The 20 lifted rows are the boot path: what the original had loaded once client and server
+# were in, in the order of its first loads (docs/findings/30-proton-trace.md, section 3: one
+# traced run under Proton), less Titanfall2.exe and the wrapper's Activation64.dll, less
+# OriginSDK.dll (never lifted), d3dcompiler_46.dll (Microsoft's) and GFSDK_SSAO.win64.dll
+# (PLAN.md replaces NVIDIA's libraries), plus amd_ags_x64.dll at the place where Proton
+# loaded its own builtin of that name (29.720 s, between GFSDK_SSAO and d3dcompiler_46).
+#
+# Bases are assigned in this order, before the native modules of runtime/modules.def.  tier0
+# and vstdlib come first, as in gate2/modules.def, so both have the bases they have in the
+# Gate 2 driver.  Add at the end; do not reorder (every address of a build depends on it).
+#
+# `gate3 load` with no names loads the lifted rows in this order.  tools/liftcache reads the
+# lifted rows too: module name and DLL.
+lifted   tier0.dll                dll=game/bin/x64_retail/tier0.dll
+lifted   vstdlib.dll              dll=game/bin/x64_retail/vstdlib.dll
+lifted   launcher.dll             dll=game/bin/x64_retail/launcher.dll
+lifted   rtech_game.dll           dll=game/bin/x64_retail/rtech_game.dll
+lifted   filesystem_stdio.dll     dll=game/bin/x64_retail/filesystem_stdio.dll
+lifted   bink2w64.dll             dll=game/bin/x64_retail/bink2w64.dll
+lifted   engine.dll               dll=game/bin/x64_retail/engine.dll
+lifted   inputsystem.dll          dll=game/bin/x64_retail/inputsystem.dll
+lifted   vphysics.dll             dll=game/bin/x64_retail/vphysics.dll
+lifted   amd_ags_x64.dll          dll=game/bin/x64_retail/amd_ags_x64.dll
+lifted   materialsystem_dx11.dll  dll=game/bin/x64_retail/materialsystem_dx11.dll
+lifted   datacache.dll            dll=game/bin/x64_retail/datacache.dll
+lifted   studiorender.dll         dll=game/bin/x64_retail/studiorender.dll
+lifted   vguimatsurface.dll       dll=game/bin/x64_retail/vguimatsurface.dll
+lifted   vgui2.dll                dll=game/bin/x64_retail/vgui2.dll
+lifted   localize.dll             dll=game/bin/x64_retail/localize.dll
+lifted   mileswin64.dll           dll=game/bin/x64_retail/mileswin64.dll
+lifted   binkawin64.dll           dll=game/bin/x64_retail/binkawin64.dll
+lifted   client.dll               dll=game/bin/x64_retail/client.dll
+lifted   server.dll               dll=game/server.dll   dir=.
+
+# The game's 21st DLL (docs/findings/34-ui-dll.md; docs/handoff/gate3-run-6.md): not on the
+# boot path of the lines above.  The pak loader loads it by path seconds into the run,
+# LoadLibraryA("r2\paks\Win64\ui(11).dll") at rtech_game+0xa238, when the pak `ui(11).rpak`
+# says it has a code DLL, and the engine then looks its exports up by name (GetProcAddress
+# from engine+0xfbaf3 and +0xfbb1a).  839 exported UI functions, no imports, no relocations.
+# `module=ui11`: the file name is not a C identifier.  `place=late`: its base comes from the
+# late group of the image arena (rt/module.h), so that no base of the 20 modules above or of
+# the native modules moved when this row was added.  Further late rows go below it.
+lifted   ui(11).dll               dll=game/r2/paks/Win64/ui(11).dll   module=ui11   dir=r2/paks/Win64   place=late
+
+# Microsoft's shader compiler, d3dcompiler_46.dll, is not lifted either.  Its row was here
+# until unit d3d-reflect gave D3DReflect a shim (runtime/shims/d3dcompiler_46): a shim's
+# library must be a row of runtime/modules.def, so the row moved to the end of that file,
+# which is where this one stood in the order of bases (the native modules of the runtime's
+# table come before this table's).  No base changed.
+# (OriginSDK.dll and the two GFSDK libraries are `stubbed` in runtime/modules.def as well.)

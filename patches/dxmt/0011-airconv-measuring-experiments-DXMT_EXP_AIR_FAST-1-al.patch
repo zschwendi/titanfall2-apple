@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tfrecomp <tfrecomp@example.invalid>
+Date: Wed, 14 Oct 2026 02:09:41 -0400
+Subject: [PATCH 11/12] airconv: measuring experiments DXMT_EXP_AIR_FAST=1 (all
+ fast-math flags) and DXMT_EXP_AIR_O2=1 (LLVM's O2 module pipeline after the
+ usual list); off unless set
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/airconv/airconv_context.cpp | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/src/airconv/airconv_context.cpp b/src/airconv/airconv_context.cpp
+index ffa2596..de4af55 100644
+--- a/src/airconv/airconv_context.cpp
++++ b/src/airconv/airconv_context.cpp
+@@ -4,6 +4,7 @@
+ #include "llvm/IR/LLVMContext.h"
+ #include "llvm/IR/Metadata.h"
+ #include "llvm/IR/Module.h"
++#include "llvm/IR/Operator.h"
+ #include "llvm/IR/Verifier.h"
+ #include "llvm/Passes/PassBuilder.h"
+ #include "llvm/Support/VersionTuple.h"
+@@ -153,6 +154,24 @@ runOptimizationPasses(llvm::Module &M) {
+ 
+   // Optimize the IR!
+   MPM.run(M, MAM);
++
++  /* EXPERIMENTS (14 October 2026, measurements only; measure with DXMT_SHADER_CACHE=0, or an old cache
++     entry hides the change).  DXMT_EXP_AIR_FAST=1: every floating-point instruction gets all fast-math
++     flags (nnan and ninf too, which the converter never sets).  DXMT_EXP_AIR_O2=1: after the list above,
++     LLVM's own O2 module pipeline. */
++  static const int exp_fast = [] { const char *e = getenv("DXMT_EXP_AIR_FAST"); return e ? atoi(e) : 0; }();
++  static const int exp_o2 = [] { const char *e = getenv("DXMT_EXP_AIR_O2"); return e ? atoi(e) : 0; }();
++  if (exp_fast) {
++    for (auto &F : M)
++      for (auto &BB : F)
++        for (auto &I : BB)
++          if (isa<FPMathOperator>(&I))
++            I.setFastMathFlags(FastMathFlags::getFast());
++  }
++  if (exp_o2) {
++    ModulePassManager O2 = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
++    O2.run(M, MAM);
++  }
+ }
+ 
+ void

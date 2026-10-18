@@ -1,0 +1,5 @@
+0 . D3D11CreateDevice =0 n i1 i0 i0 n i0 i7 >o1 >I4[45056] >o2
+1 . ID3D11Device::CreateBuffer =0 o1 sD3D11_BUFFER_DESC{ByteWidth=256,Usage=0,BindFlags=1,CPUAccessFlags=0,MiscFlags=0,StructureByteStride=0} n >o3
+2 . ID3D11Buffer::Release =0 o3
+3 . ID3D11DeviceContext::Release =0 o2
+4 . ID3D11Device::Release =0 o1

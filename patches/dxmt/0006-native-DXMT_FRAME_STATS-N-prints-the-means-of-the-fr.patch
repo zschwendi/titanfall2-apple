@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tfrecomp <tfrecomp@example.invalid>
+Date: Tue, 13 Oct 2026 01:24:01 -0400
+Subject: [PATCH 06/12] native: DXMT_FRAME_STATS=<N> prints the means of the
+ frame counters every N frames
+
+---
+ src/d3d11/d3d11_swapchain.cpp | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index a1c9032..fffab07 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -1,3 +1,5 @@
++#include <cstdio>
++#include <cstdlib>
+ #include "d3d11_swapchain.hpp"
+ #include "com/com_guid.hpp"
+ #include "config/config.hpp"
+@@ -818,6 +820,34 @@ public:
+   };
+ 
+   void UpdateStatistics(const FrameStatisticsContainer& statistics, uint64_t frame_id) {
++    {
++      // DXMT_FRAME_STATS=<N>: every N frames, one line on standard error with the means of the
++      // frame counters (the numbers the debug HUD shows), for runs that have no HUD.
++      static const int every = [] { const char *v = std::getenv("DXMT_FRAME_STATS"); return v ? std::atoi(v) : 0; }();
++      if (every > 0 && frame_id > 0) {
++        static uint64_t n = 0, cb = 0, sync = 0, rp = 0, rpo = 0, cp = 0, cpo = 0, rso = 0, comp = 0, blit = 0, stall = 0;
++        static double commit = 0, syncms = 0, prep = 0, flush = 0, block = 0, lat = 0;
++        auto &f = statistics.at(frame_id - 1);
++        n++; cb += f.command_buffer_count; sync += f.sync_count; rp += f.render_pass_count; rpo += f.render_pass_optimized;
++        cp += f.clear_pass_count; cpo += f.clear_pass_optimized; rso += f.resolve_pass_optimized;
++        comp += f.compute_pass_count; blit += f.blit_pass_count; stall += f.event_stall;
++        commit += f.commit_interval.count() / 1e6; syncms += f.sync_interval.count() / 1e6;
++        prep += f.encode_prepare_interval.count() / 1e6; flush += f.encode_flush_interval.count() / 1e6;
++        block += f.drawable_blocking_interval.count() / 1e6; lat += f.present_latency_interval.count() / 1e6;
++        if (n >= (uint64_t)every) {
++          const double d = (double)n;
++          std::fprintf(stderr,
++                       "dxmt: frame stats, means of %llu frames: command buffers %.1f, syncs %.1f, render passes %.1f "
++                       "(and %.1f merged away), clear passes %.1f (and %.1f merged away), resolves merged %.1f, "
++                       "compute passes %.1f, blit passes %.1f, event stalls %.1f; ms: commit %.2f, sync %.2f, "
++                       "encode prepare %.2f, encode flush %.2f, drawable wait %.2f, present latency %.2f\n",
++                       (unsigned long long)n, cb / d, sync / d, (rp - rpo) / d, rpo / d, (cp - cpo) / d, cpo / d, rso / d,
++                       comp / d, blit / d, stall / d, commit / d, syncms / d, prep / d, flush / d, block / d, lat / d);
++          n = cb = sync = rp = rpo = cp = cpo = rso = comp = blit = stall = 0;
++          commit = syncms = prep = flush = block = lat = 0;
++        }
++      }
++    }
+     hud.begin();
+     auto &frame = statistics.at(frame_id - 1); // show the previous one frame statistics
+     auto &average = statistics.average();

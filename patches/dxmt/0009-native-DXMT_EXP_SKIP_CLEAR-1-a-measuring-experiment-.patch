@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tfrecomp <tfrecomp@example.invalid>
+Date: Tue, 13 Oct 2026 07:05:17 -0400
+Subject: [PATCH 09/12] native: DXMT_EXP_SKIP_CLEAR=1, a measuring experiment:
+ drop depth-stencil clears that no render pass absorbed
+
+Wrong in general (a clear that matters is lost) and off unless the variable is set.  It measures what
+the stand-alone clear pass before Present costs: sp_sewers1 at 3024 by 1890 46.1 to 48.2 frames a
+second, sp_tday 45.9 to 46.6.  The correct change, carrying such a clear into the next command buffer,
+is not made.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/dxmt/dxmt_context.cpp | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/dxmt/dxmt_context.cpp b/src/dxmt/dxmt_context.cpp
+index 17b359b..295effe 100644
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -1112,7 +1112,13 @@ ArgumentEncodingContext::flushCommands(WMT::CommandBuffer cmdbuf, uint64_t seqId
+     }
+     case EncoderType::Clear: {
+       auto data = static_cast<ClearEncoderData *>(current);
+-      {
++      /* EXPERIMENT (a measurement only, wrong in general): DXMT_EXP_SKIP_CLEAR=1 drops every
++         depth-stencil clear that did not become the load action of a render pass */
++      static const bool exp_skip_clear = [] {
++        const char *e = getenv("DXMT_EXP_SKIP_CLEAR");
++        return e && e[0] == '1';
++      }();
++      if (!(exp_skip_clear && data->clear_dsv)) {
+         WMTRenderPassInfo info;
+         WMT::InitializeRenderPassInfo(info);
+         if (data->clear_dsv) {

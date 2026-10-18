@@ -1,0 +1,93 @@
+# The interfaces the runtime describes (docs/RUNTIME.md section 3.7), and the native module
+# whose slot holds each one's guest-visible vtable and method stubs.  Planner-owned.
+#
+#     interface <name> <owner module>
+#     type      <name>                 a type that no described method uses but a shim does
+#
+# runtime/com/gen_desc.py reads this list and the MinGW-w64 headers and writes
+# desc/<name>.idef (one per interface) and types.def.  The 27 below are the interfaces
+# finding 31 found the game calling (docs/findings/31-d3d11-usage.md, section 3); nothing
+# else is described.  An interface's bases need no line: each description carries its chain.
+# Three more (unit d3d-contract): what the game's CreateComputeShader, CreateTexture1D and
+# CreateTexture3D hand out (docs/handoff/d3d-interface-layer.md, section 6): an object needs
+# a described interface to have a vtable.  The game calls no method on them that finding 31
+# typed; every method but the common three is a stop.
+#
+# All of them live in d3d11.dll's slot, the DXGI ones and the shader reflector too: the game
+# imports nothing from dxgi.dll, so the manifest has no such module, and d3dcompiler_46.dll
+# is a module of the Gate 3 driver only.  A stop names the interface, so nothing is lost.
+
+interface ID3D11Device               d3d11.dll
+interface ID3D11DeviceContext        d3d11.dll
+
+interface ID3D11Resource             d3d11.dll
+interface ID3D11Buffer               d3d11.dll
+interface ID3D11Texture1D            d3d11.dll
+interface ID3D11Texture2D            d3d11.dll
+interface ID3D11Texture3D            d3d11.dll
+
+interface ID3D11RenderTargetView     d3d11.dll
+interface ID3D11DepthStencilView     d3d11.dll
+interface ID3D11ShaderResourceView   d3d11.dll
+interface ID3D11UnorderedAccessView  d3d11.dll
+
+interface ID3D11BlendState           d3d11.dll
+interface ID3D11DepthStencilState    d3d11.dll
+interface ID3D11RasterizerState      d3d11.dll
+interface ID3D11SamplerState         d3d11.dll
+interface ID3D11InputLayout          d3d11.dll
+interface ID3D11Query                d3d11.dll
+
+interface ID3D11VertexShader         d3d11.dll
+interface ID3D11PixelShader          d3d11.dll
+interface ID3D11GeometryShader       d3d11.dll
+interface ID3D11HullShader           d3d11.dll
+interface ID3D11DomainShader         d3d11.dll
+interface ID3D11ComputeShader        d3d11.dll
+
+interface ID3D11ShaderReflection     d3d11.dll
+
+interface IDXGIDevice1               d3d11.dll
+interface IDXGIAdapter1              d3d11.dll
+interface IDXGIFactory1              d3d11.dll
+interface IDXGIOutput                d3d11.dll
+interface IDXGISwapChain             d3d11.dll
+interface IDXGISurface               d3d11.dll
+
+# Unit d3d-fix-2 (E8 of docs/reviews/d3d-contract-check.md): Microsoft documents IDXGIResource on
+# every Direct3D 11 resource, and through it Windows answers IDXGIDeviceSubObject and IDXGIObject
+# on buffers and on 1D and 3D textures.  Neither finding 31 nor the recording (finding 40) shows
+# the game asking for it or calling one of its four methods: every method is a stop.
+interface IDXGIResource              d3d11.dll
+
+# Unit d3d-reflect: what D3DGetBlobPart hands out (d3dcommon.h; ID3DBlob is another name of the
+# same interface).  The game calls GetBufferSize and GetBufferPointer on it before
+# CreateInputLayout (materialsystem_dx11+0x3144a, +0x31456); finding 31's list has neither.
+interface ID3D10Blob                 d3d11.dll
+
+# D3D11CreateDevice (runtime/shims/d3d11/D3D11CreateDevice.c).
+type D3D_DRIVER_TYPE
+
+# Unit com-idl-source: the game's CoCreateInstance requests of 12 October 2026 (docs/scout/sound.md).
+# These four come from Wine's IDL files (third_party/wine-idl, LGPL), not the headers, read with
+# runtime/com/idl_source.py; the IDL source and its defines are on each line.  IXAudio2 is 2.7
+# (XAUDIO2_VER=7), 16 slots.  Their owner modules are xaudio2_7.dll and mmdevapi.dll (modules.def).
+interface IXAudio2              xaudio2_7.dll  idl xaudio2.idl XAUDIO2_VER=7
+# Unit com-root-iface: the voice interfaces of XAudio2 2.7.  They have no IUnknown: IXAudio2Voice has
+# no base and no uuid (a root interface, desc `root`, iid none); the other three derive from it.
+interface IXAudio2Voice            xaudio2_7.dll  idl xaudio2.idl XAUDIO2_VER=7
+interface IXAudio2SourceVoice      xaudio2_7.dll  idl xaudio2.idl XAUDIO2_VER=7
+interface IXAudio2SubmixVoice      xaudio2_7.dll  idl xaudio2.idl XAUDIO2_VER=7
+interface IXAudio2MasteringVoice   xaudio2_7.dll  idl xaudio2.idl XAUDIO2_VER=7
+interface IMMDeviceEnumerator   mmdevapi.dll   idl mmdeviceapi.idl
+interface IMMDevice             mmdevapi.dll   idl mmdeviceapi.idl
+interface IMMDeviceCollection   mmdevapi.dll   idl mmdeviceapi.idl
+
+# Unit wasapi-client: the game's IMMDevice::Activate of 12 October 2026 asks the default output
+# endpoint for an IAudioClient (dwClsCtx 0x17, no parameters); the audio client's other interfaces
+# are described here from the same IDL file, with no bodies beyond what the task gives them.
+interface IAudioClient          mmdevapi.dll   idl audioclient.idl
+interface IAudioRenderClient    mmdevapi.dll   idl audioclient.idl
+interface IAudioClock           mmdevapi.dll   idl audioclient.idl
+interface IAudioStreamVolume    mmdevapi.dll   idl audioclient.idl
+interface ISimpleAudioVolume    mmdevapi.dll   idl audioclient.idl

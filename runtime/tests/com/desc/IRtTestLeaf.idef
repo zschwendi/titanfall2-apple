@@ -1,0 +1,10 @@
+# Written by hand: an interface derived from the root IRtTestRoot (its chain ends with the root,
+# which has no IID).  Format: runtime/com/gen_desc.py.
+interface IRtTestLeaf
+iid       none
+owner     rttest.dll
+header    rttest
+inherits  IRtTestRoot none 2
+  0  IRtTestRoot  UINT Value(void)
+  1  IRtTestRoot  void Stop(UINT x)
+  2  IRtTestLeaf  UINT Twice(void)                   # no body: a stop

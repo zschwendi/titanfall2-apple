@@ -1,0 +1,265 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tfrecomp <tfrecomp@example.invalid>
+Date: Thu, 8 Oct 2026 20:30:34 -0400
+Subject: [PATCH 02/12] native: enumerate monitors and display modes through
+ CoreGraphics
+
+The headless monitor functions returned no monitor at all, so
+IDXGIAdapter::EnumOutputs found nothing, there was no mode list, and a
+swap chain never learned the refresh rate it paces SyncInterval with.
+
+An HMONITOR is now a CGDirectDisplayID.  The monitors are the online
+displays that do not mirror another one (the list of active displays is
+empty while the display sleeps); output 0 is the main display.  Desktop
+coordinates and mode sizes are in points of the global display space.
+The mode list is the current mode plus every mode CoreGraphics calls
+usable for the desktop, without duplicates.  Modes are reported only,
+never set.
+
+util now links CoreGraphics and CoreFoundation in native builds.
+---
+ src/util/meson.build              |   6 ++
+ src/util/wsi_monitor_headless.cpp | 174 +++++++++++++++++++++++++++---
+ 2 files changed, 168 insertions(+), 12 deletions(-)
+
+diff --git a/src/util/meson.build b/src/util/meson.build
+index 93dd7bc..ed78980 100644
+--- a/src/util/meson.build
++++ b/src/util/meson.build
+@@ -24,12 +24,16 @@ util_src = files([
+   'sha1/sha1_util.cpp',
+ ])
+ 
++util_deps = []
++
+ if not dxmt_crossbuild
+   util_src += files([
+     'wsi_monitor_headless.cpp',
+     'wsi_window_headless.cpp',
+     'wsi_platform_darwin.cpp',
+   ])
++  # wsi_monitor_headless.cpp lists displays and their modes through CoreGraphics
++  util_deps += dependency('appleframeworks', modules : [ 'CoreGraphics', 'CoreFoundation' ])
+ else
+   util_src += files([
+     'wsi_monitor_win32.cpp',
+@@ -39,10 +43,12 @@ else
+ endif
+ 
+ util_lib = static_library('util', util_src,
++  dependencies        : util_deps,
+   include_directories : [ dxmt_include_path ],
+ )
+ 
+ util_dep = declare_dependency(
+   link_with           : [ util_lib ],
++  dependencies        : util_deps,
+   include_directories : [ include_directories('.') ],
+ )
+diff --git a/src/util/wsi_monitor_headless.cpp b/src/util/wsi_monitor_headless.cpp
+index 2aaa61c..dd44edb 100644
+--- a/src/util/wsi_monitor_headless.cpp
++++ b/src/util/wsi_monitor_headless.cpp
+@@ -10,39 +10,189 @@
+ 
+ #include "wsi_monitor.hpp"
+ 
++// not <CoreGraphics/CoreGraphics.h>: it reaches IOKit headers that use
++// "interface" as an identifier, which windows_base.h defines as a macro
++#include <CoreGraphics/CGDirectDisplay.h>
++#include <CoreGraphics/CGDisplayConfiguration.h>
++
++#include <algorithm>
++#include <cmath>
++#include <cwchar>
++#include <vector>
++
++/*
++ * Native build: monitors are the online CoreGraphics displays that do not
++ * mirror another display.  (Not the "active" ones: that list is empty while
++ * the display sleeps, and an application must not lose its outputs then.)
++ *
++ *  - An HMONITOR is a CGDirectDisplayID (never 0 for a real display).
++ *  - enumMonitors(0) is the main display, like DXGI's output 0.
++ *  - Coordinates and mode sizes are in points of the global display space
++ *    (origin at the top left of the main display, y down), the unit
++ *    CGDisplayBounds() and CGDisplayModeGetWidth() use.  On a Retina display a
++ *    mode's size in points is smaller than its size in pixels.
++ *  - Display modes are only reported, never set.
++ *
++ * The CoreGraphics display functions used here may be called from any thread.
++ */
++
+ namespace dxmt::wsi {
+ 
++static inline CGDirectDisplayID toDisplayId(HMONITOR hMonitor) {
++  return CGDirectDisplayID(reinterpret_cast<uintptr_t>(hMonitor));
++}
++
++static inline HMONITOR toMonitor(CGDirectDisplayID displayId) {
++  return reinterpret_cast<HMONITOR>(uintptr_t(displayId));
++}
++
++static std::vector<CGDirectDisplayID> displayList() {
++  uint32_t count = 0;
++  if (CGGetOnlineDisplayList(0, nullptr, &count) != kCGErrorSuccess || !count)
++    return {};
++
++  std::vector<CGDirectDisplayID> displays(count);
++  if (CGGetOnlineDisplayList(count, displays.data(), &count) != kCGErrorSuccess)
++    return {};
++  displays.resize(count);
++
++  std::erase_if(displays, [](CGDirectDisplayID displayId) {
++    return CGDisplayMirrorsDisplay(displayId) != kCGNullDirectDisplay;
++  });
++
++  auto main = std::find(displays.begin(), displays.end(), CGMainDisplayID());
++  if (main != displays.end())
++    std::rotate(displays.begin(), main, main + 1);
++
++  return displays;
++}
++
++static void convertMode(CGDisplayModeRef mode, WsiMode *pMode) {
++  // 0 means "no fixed rate" (some built-in panels)
++  double refreshRate = CGDisplayModeGetRefreshRate(mode);
++  if (!(refreshRate > 0.0))
++    refreshRate = 60.0;
++
++  pMode->width = uint32_t(CGDisplayModeGetWidth(mode));
++  pMode->height = uint32_t(CGDisplayModeGetHeight(mode));
++  pMode->refreshRate = WsiRational{uint32_t(std::lround(refreshRate * 1000.0)), 1000};
++  pMode->bitsPerPixel = 32;
++  pMode->interlaced = false;
++}
++
++static bool currentMode(CGDirectDisplayID displayId, WsiMode *pMode) {
++  CGDisplayModeRef mode = CGDisplayCopyDisplayMode(displayId);
++  if (!mode)
++    return false;
++
++  convertMode(mode, pMode);
++  CGDisplayModeRelease(mode);
++  return true;
++}
++
++/*
++ * The current mode first, then every mode CoreGraphics considers usable for
++ * the desktop, without duplicates (the same size and rate usually exists both
++ * as a 1x and as a HiDPI mode).
++ */
++static std::vector<WsiMode> displayModes(CGDirectDisplayID displayId) {
++  std::vector<WsiMode> modes;
++
++  auto add = [&modes](const WsiMode &mode) {
++    for (const auto &known : modes) {
++      if (known.width == mode.width && known.height == mode.height &&
++          known.refreshRate.numerator == mode.refreshRate.numerator)
++        return;
++    }
++    modes.push_back(mode);
++  };
++
++  WsiMode mode = {};
++  if (!currentMode(displayId, &mode))
++    return modes;
++  add(mode);
++
++  const void *keys[] = {kCGDisplayShowDuplicateLowResolutionModes};
++  const void *values[] = {kCFBooleanTrue};
++  CFDictionaryRef options = CFDictionaryCreate(
++      kCFAllocatorDefault, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
++      &kCFTypeDictionaryValueCallBacks);
++  CFArrayRef all = CGDisplayCopyAllDisplayModes(displayId, options);
++  if (options)
++    CFRelease(options);
++
++  if (all) {
++    for (CFIndex i = 0, count = CFArrayGetCount(all); i < count; i++) {
++      auto candidate = CGDisplayModeRef(const_cast<void *>(CFArrayGetValueAtIndex(all, i)));
++      if (!CGDisplayModeIsUsableForDesktopGUI(candidate))
++        continue;
++      convertMode(candidate, &mode);
++      add(mode);
++    }
++    CFRelease(all);
++  }
++
++  return modes;
++}
++
+ HMONITOR getDefaultMonitor() {
+-  return nullptr;
++  return enumMonitors(0);
+ }
+ 
+ HMONITOR enumMonitors(uint32_t index) {
+-  return nullptr;
++  auto displays = displayList();
++  return index < displays.size() ? toMonitor(displays[index]) : nullptr;
+ }
+ 
+ bool getDisplayName(HMONITOR hMonitor, WCHAR (&Name)[32]) {
+-  return false;
++  auto displays = displayList();
++  auto it = std::find(displays.begin(), displays.end(), toDisplayId(hMonitor));
++  if (!hMonitor || it == displays.end())
++    return false;
++
++  std::swprintf(Name, 32, L"\\\\.\\DISPLAY%u", unsigned(it - displays.begin()) + 1);
++  return true;
+ }
+ 
+ bool getDesktopCoordinates(HMONITOR hMonitor, RECT *pRect) {
+-  return false;
+-}
++  if (!hMonitor || !CGDisplayIsOnline(toDisplayId(hMonitor)))
++    return false;
+ 
+-static inline bool retrieveDisplayMode(HMONITOR hMonitor, DWORD modeNumber,
+-                                       WsiMode *pMode) {
+-  return false;
++  CGRect bounds = CGDisplayBounds(toDisplayId(hMonitor));
++  pRect->left = LONG(std::lround(bounds.origin.x));
++  pRect->top = LONG(std::lround(bounds.origin.y));
++  pRect->right = LONG(std::lround(bounds.origin.x + bounds.size.width));
++  pRect->bottom = LONG(std::lround(bounds.origin.y + bounds.size.height));
++  return true;
+ }
+ 
+ bool getDisplayMode(HMONITOR hMonitor, uint32_t modeNumber, WsiMode *pMode) {
+-  return retrieveDisplayMode(hMonitor, modeNumber, pMode);
++  // Callers walk the list from 0 until this fails: build it once per walk.
++  static thread_local CGDirectDisplayID cachedDisplay = kCGNullDirectDisplay;
++  static thread_local std::vector<WsiMode> cachedModes;
++
++  if (!hMonitor)
++    return false;
++
++  if (modeNumber == 0 || cachedDisplay != toDisplayId(hMonitor)) {
++    cachedDisplay = toDisplayId(hMonitor);
++    cachedModes = displayModes(cachedDisplay);
++  }
++
++  if (modeNumber >= cachedModes.size())
++    return false;
++
++  *pMode = cachedModes[modeNumber];
++  return true;
+ }
+ 
+ bool getCurrentDisplayMode(HMONITOR hMonitor, WsiMode *pMode) {
+-  return retrieveDisplayMode(hMonitor, ENUM_CURRENT_SETTINGS, pMode);
++  return hMonitor && currentMode(toDisplayId(hMonitor), pMode);
+ }
+ 
+ bool getDesktopDisplayMode(HMONITOR hMonitor, WsiMode *pMode) {
+-  return retrieveDisplayMode(hMonitor, ENUM_REGISTRY_SETTINGS, pMode);
++  // modes are never changed here, so the desktop's mode is the current one
++  return getCurrentDisplayMode(hMonitor, pMode);
+ }
+ 
+-} // namespace dxmt::wsi
+\ No newline at end of file
++} // namespace dxmt::wsi

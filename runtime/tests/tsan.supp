@@ -1,0 +1,3 @@
+# ThreadSanitizer reports in runtime/core/ that are known and not yet dealt with
+# (make rt-test-tsan).  Each is described in docs/handoff/rt-test-infra-2.md.  Remove a line
+# when its report is fixed: the suite then gates on it.

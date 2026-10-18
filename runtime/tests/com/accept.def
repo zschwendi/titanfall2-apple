@@ -1,0 +1,3 @@
+# The accept list of the test-only interfaces (the format: runtime/com/accept.def).
+IRtTestShape::Touch
+IRtTestShape::Poke

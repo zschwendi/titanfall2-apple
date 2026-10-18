@@ -1,0 +1,163 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tfrecomp <tfrecomp@example.invalid>
+Date: Wed, 14 Oct 2026 02:07:52 -0400
+Subject: [PATCH 10/12] native: measuring experiments for the native-Metal
+ question (all off unless set; wrong pictures while set)
+
+DXMT_EXP_SCISSOR=1|2: render passes of at least 2 million pixels (2: with three or more colour
+targets) draw through a 1 by 1 scissor.  DXMT_EXP_SAMPLER=1|2|3: samplers without anisotropy, never
+finer than mip 2, or both.  DXMT_EXP_NO_RELOAD=1: attachments whose load action is Load are not
+loaded.  DXMT_EXP_MERGE_RO=1: a pass with a read-only depth view joins one with a writable view of
+the same texture even when a shader reads it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/dxmt/dxmt_context.cpp           | 16 +++++++--
+ src/winemetal/unix/winemetal_unix.c | 56 +++++++++++++++++++++++++++--
+ 2 files changed, 67 insertions(+), 5 deletions(-)
+
+diff --git a/src/dxmt/dxmt_context.cpp b/src/dxmt/dxmt_context.cpp
+index 295effe..b81a13b 100644
+--- a/src/dxmt/dxmt_context.cpp
++++ b/src/dxmt/dxmt_context.cpp
+@@ -1544,6 +1544,7 @@ ArgumentEncodingContext::checkEncoderRelation(EncoderData *former, EncoderData *
+       r1->gs_arg_marshal_tasks = std::move(r0->gs_arg_marshal_tasks);
+       r1->ts_arg_marshal_tasks = std::move(r0->ts_arg_marshal_tasks);
+       r1->use_visibility_result = r0->use_visibility_result || r1->use_visibility_result;
++      r1->dsv_readonly_flags &= r0->dsv_readonly_flags; /* the joined pass writes what either part writes */
+       r1->samples_own_depth = r0->samples_own_depth || r1->samples_own_depth;
+ 
+       r1->fence_update.merge(r0->fence_update);
+@@ -1603,7 +1604,16 @@ ArgumentEncodingContext::isEncoderSignatureMatched(RenderEncoderData *r0, Render
+     return false;
+   if (r0->dsv_planar_flags != r1->dsv_planar_flags)
+     return false;
+-  if (r0->dsv_readonly_flags != r1->dsv_readonly_flags)
++  /* EXPERIMENT (13 and 14 October 2026, a measurement only, wrong pictures): DXMT_EXP_MERGE_RO=1 joins a pass
++     with a read-only depth view and one with a writable view of the same texture even when a shader of
++     either reads that texture, as a renderer built for a tile-based GPU would not have to split them.
++     The joined pass is held to the writable rule below. */
++  static const bool exp_merge_ro = [] {
++    const char *e = getenv("DXMT_EXP_MERGE_RO");
++    return e && e[0] == '1';
++  }();
++  bool mixed = r0->dsv_readonly_flags != r1->dsv_readonly_flags;
++  if (mixed && !exp_merge_ro)
+     return false;
+   if (r0->render_target_array_length != r1->render_target_array_length)
+     return false;
+@@ -1617,7 +1627,7 @@ ArgumentEncodingContext::isEncoderSignatureMatched(RenderEncoderData *r0, Render
+   if (r0->dsv_planar_flags & 1) {
+     if (r0->depth.attachment != r1->depth.attachment)
+       return false;
+-    if (r0->dsv_readonly_flags & 1) {
++    if (!mixed && (r0->dsv_readonly_flags & 1)) {
+       if (r1->depth.load_action == WMTLoadActionClear)
+         return false;
+     } else {
+@@ -1630,7 +1640,7 @@ ArgumentEncodingContext::isEncoderSignatureMatched(RenderEncoderData *r0, Render
+   if (r0->dsv_planar_flags & 2) {
+     if (r0->stencil.attachment != r1->stencil.attachment)
+       return false;
+-    if (r0->dsv_readonly_flags & 2) {
++    if (!mixed && (r0->dsv_readonly_flags & 2)) {
+       if (r1->stencil.load_action == WMTLoadActionClear)
+         return false;
+     } else {
+diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
+index 1ec22d4..02ed2f1 100644
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -251,6 +251,21 @@ pt_command_buffer(id<MTLCommandBuffer> cb) {
+ }
+ 
+ /* A new pass of the command buffer; *buf is the sample buffer to attach, nil if there is none. */
++/* EXPERIMENTS (13 and 14 October 2026, measurements only: the pictures are wrong while one is set).
++ *   DXMT_EXP_SCISSOR=1  every render pass of at least 2 million pixels draws through a 1 by 1 scissor:
++ *                       what is left of its time is geometry and fixed cost, not pixel work.
++ *   DXMT_EXP_SCISSOR=2  the same for passes with three or more colour targets only (the scene).
++ *   DXMT_EXP_SAMPLER=1  every sampler without anisotropy; =2 never finer than mip level 2; =3 both.
++ *   DXMT_EXP_NO_RELOAD=1  a colour, depth or stencil attachment whose load action is Load is not
++ *                       loaded (DontCare): the cost of reloading targets between passes. */
++static int
++exp_env(const char *name) {
++  const char *e = getenv(name);
++  return e ? atoi(e) : 0;
++}
++static int exp_scissor = -1, exp_sampler = -1, exp_no_reload = -1;
++static _Thread_local id exp_scissored_encoder;
++
+ static struct pt_pass *
+ pt_new_pass(id<MTLCommandBuffer> cb, int kind, id<MTLCounterSampleBuffer> *buf) {
+   NSValue *v = objc_getAssociatedObject(cb, &pt_key);
+@@ -447,6 +462,12 @@ _MTLDevice_newSamplerState(void *obj) {
+   sampler_desc.lodMinClamp = info->lod_min_clamp;
+   sampler_desc.maxAnisotropy = info->max_anisotroy;
+   sampler_desc.lodAverage = info->lod_average;
++  if (exp_sampler < 0)
++    exp_sampler = exp_env("DXMT_EXP_SAMPLER");
++  if (exp_sampler & 1)
++    sampler_desc.maxAnisotropy = 1;
++  if ((exp_sampler & 2) && sampler_desc.lodMinClamp < 2.0f)
++    sampler_desc.lodMinClamp = 2.0f;
+   sampler_desc.normalizedCoordinates = info->normalized_coords;
+   sampler_desc.supportArgumentBuffers = info->support_argument_buffers;
+ 
+@@ -777,8 +798,36 @@ _MTLCommandBuffer_renderCommandEncoder(void *obj) {
+     }
+   }
+ 
++  if (exp_no_reload < 0)
++    exp_no_reload = exp_env("DXMT_EXP_NO_RELOAD");
++  if (exp_no_reload) {
++    for (unsigned i = 0; i < 8; i++)
++      if (descriptor.colorAttachments[i].loadAction == MTLLoadActionLoad)
++        descriptor.colorAttachments[i].loadAction = MTLLoadActionDontCare;
++    if (descriptor.depthAttachment.loadAction == MTLLoadActionLoad)
++      descriptor.depthAttachment.loadAction = MTLLoadActionDontCare;
++    if (descriptor.stencilAttachment.loadAction == MTLLoadActionLoad)
++      descriptor.stencilAttachment.loadAction = MTLLoadActionDontCare;
++  }
++
+   params->ret = (obj_handle_t)[(id<MTLCommandBuffer>)params->handle renderCommandEncoderWithDescriptor:descriptor];
+ 
++  if (exp_scissor < 0)
++    exp_scissor = exp_env("DXMT_EXP_SCISSOR");
++  exp_scissored_encoder = nil;
++  if (exp_scissor && params->ret) {
++    id<MTLTexture> t0 = (id<MTLTexture>)info->colors[0].texture;
++    id<MTLTexture> any = t0 ? t0 : (id<MTLTexture>)info->depth.texture;
++    unsigned ncolor = 0;
++    for (unsigned i = 0; i < 8; i++)
++      if (info->colors[i].texture)
++        ncolor++;
++    if (any && any.width * any.height >= 2000000 && (exp_scissor != 2 || ncolor >= 3)) {
++      exp_scissored_encoder = (id)params->ret;
++      [(id<MTLRenderCommandEncoder>)params->ret setScissorRect:(MTLScissorRect){0, 0, 1, 1}];
++    }
++  }
++
+   [descriptor release];
+   return STATUS_SUCCESS;
+ }
+@@ -1280,7 +1329,10 @@ _MTLRenderCommandEncoder_encodeCommands(void *obj) {
+     }
+     case WMTRenderCommandSetScissorRects: {
+       struct wmtcmd_render_setscissorrects *body = (struct wmtcmd_render_setscissorrects *)next;
+-      [encoder setScissorRects:(const MTLScissorRect *)body->scissor_rects.ptr count:body->rect_count];
++      if (encoder == exp_scissored_encoder)
++        [encoder setScissorRect:(MTLScissorRect){0, 0, 1, 1}];
++      else
++        [encoder setScissorRects:(const MTLScissorRect *)body->scissor_rects.ptr count:body->rect_count];
+       break;
+     }
+     case WMTRenderCommandSetPSO: {
+@@ -1527,7 +1579,7 @@ _MTLRenderCommandEncoder_encodeCommands(void *obj) {
+         struct WMTScissorRect src;
+         MTLScissorRect dst;
+       } u = {.src = body->scissor_rect};
+-      [encoder setScissorRect:u.dst];
++      [encoder setScissorRect:encoder == exp_scissored_encoder ? (MTLScissorRect){0, 0, 1, 1} : u.dst];
+       break;
+     }
+     case WMTRenderCommandDispatchThreadsPerTile: {

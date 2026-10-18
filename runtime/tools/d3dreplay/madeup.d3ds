@@ -1,0 +1,27 @@
+0 . D3D11CreateDevice =0 n i1 i0 i0 n i0 i7 >o1 >I4[45056] >o2
+1 . ID3D11Device::QueryInterface =0 o1 g0f97db777662ba48ba28070143b4392c >o3
+2 . IDXGIDevice1::GetParent =0 o3 g618f03293938264691fd086879011a05 >o4
+3 . IDXGIAdapter1::GetParent =0 o4 g78ae0a776ff2ba4da829253c83d1b387 >o5
+4 . IDXGIFactory1::EnumAdapters1 =0 o5 i0 >o6
+5 . IDXGIAdapter1::EnumOutputs =0 o6 i0 >o7
+6 . IDXGIOutput::GetDisplayModeList =0 o7 i28 i0 >I4[2] n
+7 . IDXGIOutput::GetDisplayModeList =0 o7 i28 i0 >I4[2] >SDXGI_MODE_DESC[{Width=640,Height=480,RefreshRate.Numerator=60000,RefreshRate.Denominator=1000,Format=28,ScanlineOrdering=1,Scaling=0}{Width=800,Height=600,RefreshRate.Numerator=60000,RefreshRate.Denominator=1000,Format=28,ScanlineOrdering=1,Scaling=0}]
+8 . IDXGIOutput::Release =0 o7
+9 . IDXGIAdapter1::EnumOutputs =2289696770 o6 i1 >o?
+10 . IDXGIAdapter1::GetDesc =0 o6 >sDXGI_ADAPTER_DESC{VendorId=4660,DeviceId=22136,SubSysId=0,Revision=0,DedicatedVideoMemory=1073741824,DedicatedSystemMemory=0,SharedSystemMemory=1073741824,AdapterLuid.LowPart=1,AdapterLuid.HighPart=0}
+12 F ID3D11Device::GetImmediateContext - o1 >o2
+18 . ID3D11Device::CreateSamplerState =0 o1 sD3D11_SAMPLER_DESC{Filter=0,AddressU=3,AddressV=3,AddressW=3,MipLODBias=0,MaxAnisotropy=1,ComparisonFunc=8,BorderColor[0]=0,BorderColor[1]=0,BorderColor[2]=0,BorderColor[3]=0,MinLOD=0,MaxLOD=3.402823e+38} >o8
+19 . ID3D11Device::CreateSamplerState =0 o1 sD3D11_SAMPLER_DESC{Filter=0,AddressU=3,AddressV=3,AddressW=3,MipLODBias=0,MaxAnisotropy=1,ComparisonFunc=8,BorderColor[0]=0,BorderColor[1]=0,BorderColor[2]=0,BorderColor[3]=0,MinLOD=0,MaxLOD=3.402823e+38} >o8
+20 . ID3D11Device::CreateBuffer =0 o1 sD3D11_BUFFER_DESC{ByteWidth=112,Usage=2,BindFlags=4,CPUAccessFlags=65536,MiscFlags=0,StructureByteStride=0} n >o9
+21 . ID3D11DeviceContext::Map =0 o2 o9 i0 i4 i0 >sD3D11_MAPPED_SUBRESOURCE{pData=589824,RowPitch=112,DepthPitch=112}
+22 W 9 0 16 96
+23 . ID3D11DeviceContext::Unmap - o2 o9 i0
+24 . ID3D11Device::CreateTexture2D =0 o1 sD3D11_TEXTURE2D_DESC{Width=4,Height=4,MipLevels=1,ArraySize=1,Format=28,SampleDesc.Count=1,SampleDesc.Quality=0,Usage=1,BindFlags=8,CPUAccessFlags=0,MiscFlags=0} sD3D11_SUBRESOURCE_DATA{pSysMem=b64,SysMemPitch=16,SysMemSlicePitch=64} >o10
+25 . ID3D11Device::CreateShaderResourceView =0 o1 o10 sD3D11_SHADER_RESOURCE_VIEW_DESC{Format=28,ViewDimension=4,Texture2D.MostDetailedMip=0,Texture2D.MipLevels=1} >o11
+26 . ID3D11Device::CreateVertexShader =0 o1 B464 i464 n >o12
+27 . ID3D11Device::CreateQuery =0 o1 sD3D11_QUERY_DESC{Query=0,MiscFlags=0} >o13
+28 . ID3D11DeviceContext::End - o2 o13
+29 . ID3D11DeviceContext::GetData =1 o2 o13 n i0 i0
+30 . ID3D11SamplerState::Release =1 o8
+31 . ID3D11SamplerState::Release =0 o8
+32 . ID3D11Device::CreateSamplerState =0 o1 sD3D11_SAMPLER_DESC{Filter=21,AddressU=1,AddressV=1,AddressW=1,MipLODBias=0,MaxAnisotropy=1,ComparisonFunc=8,BorderColor[0]=0,BorderColor[1]=0,BorderColor[2]=0,BorderColor[3]=0,MinLOD=0,MaxLOD=3.402823e+38} >o14

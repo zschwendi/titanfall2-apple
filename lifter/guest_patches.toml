@@ -1,0 +1,167 @@
+# Guest patches: every place where the lifted code differs from the game's code ON PURPOSE.
+#
+# Read lifter/guest_patches.py first: it says what a patch is, when the lifter applies one
+# (module, the DLL file's SHA-256 and the bytes at the rva must all match; a listed patch
+# that does not match stops the lift) and how a reader of the lifted C or of a module's
+# report sees one.  `lifter.lift --no-patches` (GUEST_PATCHES=off for the make targets) lifts
+# without them.
+#
+# A row here changes what the game does.  Adding or changing one is a decision of the
+# project's owner, not of whoever is fixing a fault: say in the [fix] where it was decided.
+#
+#   [fix.<name>]   what the patch does and why, once for all its sites
+#       kind       "reuse-load", the only kind there is (lifter/guest_patches.py)
+#       what, why  in our own words; no listing of game code
+#       ref        where it was found, measured and decided
+#       decided    who decided it and when (optional)
+#   [[patch]]      one site
+#       fix        the name of its [fix]
+#       module     the lifter's name of the module
+#       sha256     of the DLL file the row was reviewed against
+#       at, bytes  rva and exact bytes of the instruction that is patched
+#       reuse, reuse_bytes   reuse-load: rva and exact bytes of the earlier load whose value it takes
+#
+# rvas are relative to the module's base.  The bytes are those of the two instructions named,
+# nothing more: enough for the lifter to refuse a row that points at something else.
+
+[fix.queue-push-one-read]
+kind = "reuse-load"
+what = """
+In the push routine of the game's lock-free queue: under the queue's lock the routine loads \
+the link of the tail node twice, a few instructions apart.  The second load now takes the \
+value of the first instead of reading memory again.  (Both read the same location: the first \
+through the register that holds the tail node's address, the second through a copy of that \
+address which the routine has just reloaded from its own stack slot, where it stored the \
+register before taking the lock.)  With the patch the routine stores its node into the link \
+exactly when it goes on to report that it did; nothing else about the routine changes."""
+why = """
+The routine does a compare-and-swap by hand.  The first load's value decides, after the lock \
+is released, whether the push succeeded; the second decides whether the node is stored.  One \
+value is meant.  But the first thing every push does, before it takes the lock, is to write \
+the end mark into the link of the node it was given, and that node can be a recycled one that \
+a waiting pusher still holds as its tail.  When that write lands between the two loads, the \
+waiting pusher links its node and concludes that it failed, goes round and links the same \
+node again.  The queue then faults or hangs at some later time.  It is the game's own race, \
+not the lifter's: the game's queue self-test fails in 4 of 400 runs of the real DLL on real \
+x86.  In lifted code the two loads are further apart in time and it failed in 38 of 200."""
+ref = [
+    "docs/handoff/gate2-threads-2.md (the race, at the tier0 site, and the experiment that removed it)",
+    "docs/findings/36-queue-race-sites.md (the 11 copies of the routine in 8 DLLs)",
+    "issue 29, the comments of 2026-10-10 (the measurement on real x86, and the decision)",
+    "docs/handoff/lifter-patch-queue.md (this table; the counts with and without the patch)",
+]
+decided = "the owner, 2026-10-10, on issue 29: measure on real x86 first, patch if that answers it; it did"
+
+# The 11 sites.  The routine is one template: at every site the first load is 0x3f bytes and
+# the second 0x47 bytes into the function, with the same registers
+# (tools/scout/qrace_patch_sites.py compares the sites with each other).
+
+# tier0+0x1d5e0: reached only from tier0's own queue self-test (RunTSQueueTests): the one site that can be run today
+[[patch]]
+fix = "queue-push-one-read"
+module = "tier0"
+sha256 = "2ff3a9bf91d67b8d8e2c3c08eba4c8b38e8d39cb876d910d9f187ff1af4f2df0"
+at = 0x1d627
+bytes = "48 8b 08"
+reuse = 0x1d61f
+reuse_bytes = "48 8b 2e"
+
+# vstdlib+0x127d0: a queue of the event system
+[[patch]]
+fix = "queue-push-one-read"
+module = "vstdlib"
+sha256 = "b22952a07850d836babdd726b27bba87fd39228658ad44a170fd5e3b51b66caf"
+at = 0x12817
+bytes = "48 8b 08"
+reuse = 0x1280f
+reuse_bytes = "48 8b 2e"
+
+# vstdlib+0x12900: a second queue of the event system
+[[patch]]
+fix = "queue-push-one-read"
+module = "vstdlib"
+sha256 = "b22952a07850d836babdd726b27bba87fd39228658ad44a170fd5e3b51b66caf"
+at = 0x12947
+bytes = "48 8b 08"
+reuse = 0x1293f
+reuse_bytes = "48 8b 2e"
+
+# vstdlib+0x17dd0: under the thread pool's add routine (vstdlib+0x156a0)
+[[patch]]
+fix = "queue-push-one-read"
+module = "vstdlib"
+sha256 = "b22952a07850d836babdd726b27bba87fd39228658ad44a170fd5e3b51b66caf"
+at = 0x17e17
+bytes = "48 8b 08"
+reuse = 0x17e0f
+reuse_bytes = "48 8b 2e"
+
+# engine+0x1692e0: 6 direct callers; what the queue holds is not known
+[[patch]]
+fix = "queue-push-one-read"
+module = "engine"
+sha256 = "58eb1a1b44b30275bdd21368de264d856bc310d37d93a0f76f111f0026913487"
+at = 0x169327
+bytes = "48 8b 08"
+reuse = 0x16931f
+reuse_bytes = "48 8b 2e"
+
+# engine+0x21da20: by finding 36's reading the queued packet sender's queue; 297 functions above it
+[[patch]]
+fix = "queue-push-one-read"
+module = "engine"
+sha256 = "58eb1a1b44b30275bdd21368de264d856bc310d37d93a0f76f111f0026913487"
+at = 0x21da67
+bytes = "48 8b 08"
+reuse = 0x21da5f
+reuse_bytes = "48 8b 2e"
+
+# client+0x3ee4a0: 5 direct callers; what the queue holds is not known
+[[patch]]
+fix = "queue-push-one-read"
+module = "client"
+sha256 = "002b36487fec7c98882929fbccdb506d0146bbf3270cbb964a4d21c5edf7eebc"
+at = 0x3ee4e7
+bytes = "48 8b 08"
+reuse = 0x3ee4df
+reuse_bytes = "48 8b 2e"
+
+# server+0x1e0ab0: 2 direct callers; what the queue holds is not known
+[[patch]]
+fix = "queue-push-one-read"
+module = "server"
+sha256 = "a5ca3a25c8ae56952a26141b0f6cdcb6c19086c8c39013f7cb345d5d723661af"
+at = 0x1e0af7
+bytes = "48 8b 08"
+reuse = 0x1e0aef
+reuse_bytes = "48 8b 2e"
+
+# filesystem_stdio+0x27e10: the asynchronous file system's queue
+[[patch]]
+fix = "queue-push-one-read"
+module = "filesystem_stdio"
+sha256 = "dc8cf61c84b27901d9bf2d192ba209ea311c5fdce0bf2c88d4a04fe8ff68beb4"
+at = 0x27e57
+bytes = "48 8b 08"
+reuse = 0x27e4f
+reuse_bytes = "48 8b 2e"
+
+# materialsystem_dx11+0x13b050: 5 direct callers; what the queue holds is not known
+[[patch]]
+fix = "queue-push-one-read"
+module = "materialsystem_dx11"
+sha256 = "1afffb8dfe2a97a00ca3c5a68ca5277249176c2fd51ee7c5ad70f6eb699a6050"
+at = 0x13b097
+bytes = "48 8b 08"
+reuse = 0x13b08f
+reuse_bytes = "48 8b 2e"
+
+# vguimatsurface+0x1be430: 5 direct callers; what the queue holds is not known
+[[patch]]
+fix = "queue-push-one-read"
+module = "vguimatsurface"
+sha256 = "bc05f50e777261ed5f1672a33e7d3da7ef7a97d188380f628ad1fe5a0d4b05c6"
+at = 0x1be477
+bytes = "48 8b 08"
+reuse = 0x1be46f
+reuse_bytes = "48 8b 2e"

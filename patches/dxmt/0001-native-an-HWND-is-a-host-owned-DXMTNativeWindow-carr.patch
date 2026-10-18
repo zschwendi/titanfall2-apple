@@ -1,0 +1,293 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: tfrecomp <tfrecomp@example.invalid>
+Date: Thu, 8 Oct 2026 20:30:34 -0400
+Subject: [PATCH 01/12] native: an HWND is a host-owned DXMTNativeWindow
+ carrying the CAMetalLayer
+
+In a native (no Wine) build the swap chain constructor asked Wine's Mac
+driver for a Metal view and aborted without it, and the window functions
+were headless stubs (1024x1024, always a window).
+
+Define what a window is here: a pointer to a DXMTNativeWindow that the
+host program owns (include/native/dxmt_native_window.h): its CAMetalLayer
+plus optional callbacks for the client size, the display it is on, the
+minimized and foreground state, and a windowed ResizeTarget() request.
+
+- winemetal: CreateMetalViewFromHWND adopts (retains) that layer,
+  ReleaseMetalView releases it.
+- wsi_window_headless: answer from the handle instead of constants.
+  Fullscreen and mode switches still report failure.
+- d3d11: CreateSwapChain rejects an HWND that is not a window with
+  DXGI_ERROR_INVALID_CALL instead of reaching the constructor's abort().
+---
+ include/native/dxmt_native_window.h | 87 +++++++++++++++++++++++++++++
+ src/d3d11/d3d11_swapchain.cpp       |  5 ++
+ src/util/wsi_window_headless.cpp    | 55 ++++++++++++++++--
+ src/winemetal/unix/winemetal_unix.c | 24 ++++++++
+ 4 files changed, 165 insertions(+), 6 deletions(-)
+ create mode 100644 include/native/dxmt_native_window.h
+
+diff --git a/include/native/dxmt_native_window.h b/include/native/dxmt_native_window.h
+new file mode 100644
+index 0000000..ee91fd9
+--- /dev/null
++++ b/include/native/dxmt_native_window.h
+@@ -0,0 +1,87 @@
++/*
++ * What a window is to DXMT's native (no Wine) build.
++ *
++ * In a native build there is no Win32 window system behind an HWND.  The
++ * program that hosts DXMT owns the window and its CAMetalLayer and passes a
++ * pointer to a DXMTNativeWindow wherever DXGI takes an HWND
++ * (DXGI_SWAP_CHAIN_DESC::OutputWindow, IDXGIFactory2::CreateSwapChainForHwnd).
++ * DXMT never creates, resizes or destroys the window or the layer itself.
++ *
++ * Rules for the host:
++ *  - The struct must stay valid, at the same address, until every swap chain
++ *    created for it has been released.  DXMT stores the pointer and returns it
++ *    from IDXGISwapChain::GetDesc / IDXGISwapChain1::GetHwnd.
++ *  - metal_layer is created by the host (on whatever thread its window
++ *    toolkit requires, normally the main thread) before the swap chain.  DXMT
++ *    retains it for the life of each swap chain and sets its device,
++ *    pixelFormat, drawableSize (= the swap chain's size), colorspace, opaque,
++ *    framebufferOnly and displaySyncEnabled; it keeps the contentsScale it
++ *    finds.  Those writes are dispatched synchronously to the main queue, so
++ *    the main thread must keep servicing it (see execute_on_main).
++ *  - The callbacks may be called from any thread that calls into DXGI or
++ *    Direct3D, at any time while a swap chain exists.  They must not call back
++ *    into DXGI or Direct3D.  Any of them may be NULL.
++ *  - Sizes are in the unit the host wants swap chains to be in ("pixels" as
++ *    the application sees them).  DXMT does no scaling of its own.
++ */
++
++#ifndef DXMT_NATIVE_WINDOW_H
++#define DXMT_NATIVE_WINDOW_H
++
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#define DXMT_NATIVE_WINDOW_MAGIC 0x574E5844u /* bytes 'D' 'X' 'N' 'W' */
++#define DXMT_NATIVE_WINDOW_VERSION 1u
++
++struct DXMTNativeWindow {
++  uint32_t magic;   /* DXMT_NATIVE_WINDOW_MAGIC */
++  uint32_t version; /* DXMT_NATIVE_WINDOW_VERSION */
++
++  /* CAMetalLayer *, owned by the host.  Required. */
++  void *metal_layer;
++
++  /* Passed back as the first argument of every callback. */
++  void *user;
++
++  /*
++   * Size of the client area.  Used only when the application asks for a
++   * swap chain or a ResizeBuffers() of width or height 0.
++   * NULL: such a request yields a 0x0 swap chain, as for a minimized window.
++   */
++  void (*get_client_size)(void *user, uint32_t *width, uint32_t *height);
++
++  /*
++   * CGDirectDisplayID of the display the window is on.  Used for the swap
++   * chain's refresh rate and for IDXGISwapChain::GetContainingOutput().
++   * NULL, or a return value of 0: the main display.
++   */
++  uint32_t (*get_display_id)(void *user);
++
++  /*
++   * Non-zero while the window is minimized.  Present() then presents nothing
++   * and returns DXGI_STATUS_OCCLUDED (for non-flip swap effects).
++   * NULL: never minimized.
++   */
++  int (*is_minimized)(void *user);
++
++  /* Non-zero while the window is the foreground window.  NULL: always. */
++  int (*is_foreground)(void *user);
++
++  /*
++   * IDXGISwapChain::ResizeTarget() in windowed mode: the application asks for
++   * a client area of this size.  The host may do it later and on another
++   * thread, and tells the application the way it tells it about any resize.
++   * NULL: the request is ignored.
++   */
++  void (*request_client_size)(void *user, uint32_t width, uint32_t height);
++};
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* DXMT_NATIVE_WINDOW_H */
+diff --git a/src/d3d11/d3d11_swapchain.cpp b/src/d3d11/d3d11_swapchain.cpp
+index 86cf466..21b4f48 100644
+--- a/src/d3d11/d3d11_swapchain.cpp
++++ b/src/d3d11/d3d11_swapchain.cpp
+@@ -1104,6 +1104,11 @@ CreateSwapChain(
+     return DXGI_ERROR_INVALID_CALL;
+   InitReturnPtr(ppSwapChain);
+ 
++  if (!wsi::isWindow(hWnd)) {
++    ERR("CreateSwapChain: invalid window handle");
++    return DXGI_ERROR_INVALID_CALL;
++  }
++
+   DWORD window_process_id;
+   GetWindowThreadProcessId(hWnd, &window_process_id);
+   if (GetProcessId(GetCurrentProcess()) != window_process_id) {
+diff --git a/src/util/wsi_window_headless.cpp b/src/util/wsi_window_headless.cpp
+index 382e150..53424e6 100644
+--- a/src/util/wsi_window_headless.cpp
++++ b/src/util/wsi_window_headless.cpp
+@@ -11,21 +11,46 @@
+ #include "wsi_window.hpp"
+ #include "wsi_monitor.hpp"
+ 
++#include "native/dxmt_native_window.h"
++
+ #include "util_string.hpp"
+ #include "log/log.hpp"
+ 
+ namespace dxmt::wsi {
+ 
++/*
++ * Native build: there is no window system behind an HWND.  An HWND is a
++ * pointer to a DXMTNativeWindow that the host program owns (see
++ * include/native/dxmt_native_window.h); everything here is answered from it.
++ * Fullscreen and display mode changes are not available.
++ */
++static const DXMTNativeWindow *nativeWindow(HWND hWindow) {
++  auto window = reinterpret_cast<const DXMTNativeWindow *>(hWindow);
++  if (!window || window->magic != DXMT_NATIVE_WINDOW_MAGIC ||
++      window->version != DXMT_NATIVE_WINDOW_VERSION || !window->metal_layer)
++    return nullptr;
++  return window;
++}
++
+ void getWindowSize(HWND hWindow, uint32_t *pWidth, uint32_t *pHeight) {
++  uint32_t width = 0, height = 0;
++
++  auto window = nativeWindow(hWindow);
++  if (window && window->get_client_size)
++    window->get_client_size(window->user, &width, &height);
++
+   if (pWidth)
+-    *pWidth = 1024;
++    *pWidth = width;
+ 
+   if (pHeight)
+-    *pHeight = 1024;
++    *pHeight = height;
+ }
+ 
+ void resizeWindow(HWND hWindow, DXMTWindowState *pState, uint32_t width,
+                   uint32_t height) {
++  auto window = nativeWindow(hWindow);
++  if (window && window->request_client_size)
++    window->request_client_size(window->user, width, height);
+ }
+ 
+ bool setWindowMode(HMONITOR hMonitor, HWND hWindow, const WsiMode &mode) {
+@@ -48,17 +73,35 @@ bool restoreDisplayMode(HMONITOR hMonitor) {
+ }
+ 
+ HMONITOR getWindowMonitor(HWND hWindow) {
+-  return 0;
++  uint32_t display_id = 0;
++
++  auto window = nativeWindow(hWindow);
++  if (window && window->get_display_id)
++    display_id = window->get_display_id(window->user);
++
++  // an HMONITOR is a CGDirectDisplayID, see wsi_monitor_headless.cpp
++  return display_id ? reinterpret_cast<HMONITOR>(uintptr_t(display_id))
++                    : getDefaultMonitor();
+ }
+ 
+-bool isWindow(HWND hWindow) { return true; }
++bool isWindow(HWND hWindow) { return nativeWindow(hWindow) != nullptr; }
+ 
+ void updateFullscreenWindow(HMONITOR hMonitor, HWND hWindow,
+                             bool forceTopmost) {
+ }
+ 
+-bool isForeground(HWND hWindow) { return true; }
++bool isForeground(HWND hWindow) {
++  auto window = nativeWindow(hWindow);
++  if (window && window->is_foreground)
++    return window->is_foreground(window->user) != 0;
++  return true;
++}
+ 
+-bool isMinimized(HWND hWindow) { return false; }
++bool isMinimized(HWND hWindow) {
++  auto window = nativeWindow(hWindow);
++  if (window && window->is_minimized)
++    return window->is_minimized(window->user) != 0;
++  return false;
++}
+ 
+ } // namespace dxmt::wsi
+diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
+index 3327b29..9abdbbc 100644
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -12,6 +12,9 @@
+ #define WINEMETAL_API
+ #include "../winemetal_thunks.h"
+ #include "../airconv_thunks.h"
++#ifdef DXMT_NATIVE
++#include "native/dxmt_native_window.h"
++#endif
+ 
+ typedef int NTSTATUS;
+ #define STATUS_SUCCESS 0
+@@ -1685,6 +1688,21 @@ static NTSTATUS
+ _CreateMetalViewFromHWND(void *obj) {
+   struct unixcall_create_metal_view_from_hwnd *params = obj;
+ 
++#ifdef DXMT_NATIVE
++  /*
++   * No Wine: the HWND is a DXMTNativeWindow owned by the host program, which
++   * also owns the CAMetalLayer.  The "view" handed back is that layer with a
++   * reference held on it until _ReleaseMetalView.
++   */
++  const struct DXMTNativeWindow *window = (const struct DXMTNativeWindow *)(uintptr_t)params->hwnd;
++  if (window && window->magic == DXMT_NATIVE_WINDOW_MAGIC && window->version == DXMT_NATIVE_WINDOW_VERSION &&
++      [(id)window->metal_layer isKindOfClass:CAMetalLayer.class]) {
++    CAMetalLayer *layer = [(CAMetalLayer *)window->metal_layer retain];
++    params->ret_view = (obj_handle_t)layer;
++    params->ret_layer = (obj_handle_t)layer;
++  }
++  return STATUS_SUCCESS;
++#else
+   struct macdrv_win_data *(*pfn_get_win_data)(HWND hwnd) = NULL;
+   void (*pfn_release_win_data)(struct macdrv_win_data *data) = NULL;
+   macdrv_metal_view (*pfn_macdrv_view_create_metal_view)(macdrv_view v, macdrv_metal_device d) = NULL;
+@@ -1716,12 +1734,17 @@ _CreateMetalViewFromHWND(void *obj) {
+   }
+ 
+   return STATUS_SUCCESS;
++#endif
+ }
+ 
+ static NTSTATUS
+ _ReleaseMetalView(void *obj) {
+   struct unixcall_generic_obj_noret *params = obj;
+ 
++#ifdef DXMT_NATIVE
++  [(CAMetalLayer *)params->handle release];
++  return STATUS_SUCCESS;
++#else
+   void (*pfn_macdrv_view_release_metal_view)(macdrv_metal_view v) = NULL;
+ 
+   struct macdrv_functions_t *macdrv_functions;
+@@ -1735,6 +1758,7 @@ _ReleaseMetalView(void *obj) {
+     pfn_macdrv_view_release_metal_view((macdrv_metal_view)params->handle);
+ 
+   return STATUS_SUCCESS;
++#endif
+ }
+ 
+ static NTSTATUS
