@@ -1,7 +1,8 @@
 # Releases and IPAs
 
-**There is no downloadable IPA, and no playable build will be published here.** This page explains why, what a release
-of this project is, and how to package your own build for your own devices.
+**No playable build will ever be published here.** A public **shell** IPA without game code, which you complete with a
+game payload built from your own files, is built and awaiting its first device test ([PRIVATE-IPA.md](PRIVATE-IPA.md)).
+This page explains why, what a release of this project is, and how to package your own build for your own devices.
 
 ## Current version
 
@@ -42,7 +43,7 @@ Files that can be shared, and are:
 | --- | --- |
 | Publish the playable TFNative IPA | **No.** It contains translated game code and middleware that we have no right to distribute. |
 | Publish the launcher-only app (`TFAssetSetup`) as an IPA | **No.** It cannot play anything, and calling it a release would mislead. It would also install only on devices registered to its signer. |
-| Publish a "shell" IPA without game code, to which each player adds a locally built game framework and re-signs everything | Possible in principle, but not built. The game code would have to move from the executable into a separate framework that the app loads, and each player would still need a Mac, Xcode, their game files, the multi-hour recompile and their own paid team to re-sign. It would save only the DXMT and LLVM build steps. |
+| Publish a "shell" IPA without game code, to which each player adds a locally built game framework and re-signs everything | **Built** ([PRIVATE-IPA.md](PRIVATE-IPA.md)): the shell holds the launcher and DXMT, the player's `TF2Game.framework` holds the runtime and the game, and `assemble_private_ipa.py` signs both with the player's team. Each player still needs a Mac, Xcode, their game files, the multi-hour recompile and a paid team; the shell saves the LLVM, DXMT and app-project steps. The shell is attached to a release only after the assembled app has run on a device. |
 | Players build and install their own app, optionally packaging it as an IPA for their own devices | **Supported**; see below. |
 
 Publishing a playable IPA would need permission from the rights holders (Electronic Arts, and RAD Game Tools/Epic Games

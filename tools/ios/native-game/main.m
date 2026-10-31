@@ -7,9 +7,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 #ifndef TF_ASSET_STAGE_ONLY
+#ifdef TF_SPLIT_PAYLOAD
+#import "GameModule.h"      // the game comes from TF2Game.framework, built by the player
+#else
 #include "rt/host_ios.h"
-#include "dxmt_native_display.h"
 #include "run.h"
+#endif
+#include "dxmt_native_display.h"
 #endif
 
 static void saveProgress(NSString *stage, NSDictionary *details) {
@@ -104,12 +108,20 @@ static void writeDeviceInfo(UIWindowScene *scene) {
     if (![scene isKindOfClass:UIWindowScene.class]) return;
     UIWindowScene *windowScene = (UIWindowScene *)scene;
     self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
+    BOOL engineReady = NO;
+    NSString *engineProblem = nil;
 #ifdef TF_ASSET_STAGE_ONLY
     UIViewController *controller = [UIViewController new];
     controller.view.backgroundColor = UIColor.blackColor;
 #else
+#ifdef TF_SPLIT_PAYLOAD
+    engineReady = TF2LoadGameModule(&engineProblem);
+#else
+    engineReady = YES;
+#endif
     UIViewController *controller = [GameViewController new];
-    controller.view = rt_host_ios_create_view();
+    if (engineReady) controller.view = rt_host_ios_create_view();
+    else controller.view.backgroundColor = UIColor.blackColor;
     for (GCController *pad in GCController.controllers) logController(@"present", pad);
     [NSNotificationCenter.defaultCenter addObserverForName:GCControllerDidConnectNotification object:nil
         queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n) { logController(@"connected", n.object); }];
@@ -143,13 +155,15 @@ static void writeDeviceInfo(UIWindowScene *scene) {
     self.gameController = controller;
     __weak GameScene *weakSelf = self;
 #ifdef TF_ASSET_STAGE_ONLY
-    self.window.rootViewController = [[TFLauncherController alloc] initWithEngineReady:NO launch:^{}];
+    self.window.rootViewController = [[TFLauncherController alloc] initWithEngineReady:engineReady engineProblem:engineProblem
+                                                                                launch:^{}];
 #else
-    self.window.rootViewController = [[TFLauncherController alloc] initWithEngineReady:YES launch:^{ [weakSelf beginGame]; }];
+    self.window.rootViewController = [[TFLauncherController alloc] initWithEngineReady:engineReady engineProblem:engineProblem
+                                                                                launch:^{ [weakSelf beginGame]; }];
 #endif
     [self.window makeKeyAndVisible];
 #ifndef TF_ASSET_STAGE_ONLY
-    if (getenv("TF_AUTOSTART")) dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf beginGame]; });
+    if (engineReady && getenv("TF_AUTOSTART")) dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf beginGame]; });
 #endif
 }
 #ifndef TF_ASSET_STAGE_ONLY
@@ -163,6 +177,9 @@ static void writeDeviceInfo(UIWindowScene *scene) {
     });
 }
 - (void)beginGame {
+#ifdef TF_SPLIT_PAYLOAD
+    if (!tf2_game) return;
+#endif
     if (self.gameStarted) return;
     self.gameStarted = YES;
     self.gameRunning = YES;

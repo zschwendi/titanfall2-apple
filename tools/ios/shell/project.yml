@@ -1,0 +1,46 @@
+# The public TF2 shell: the launcher and the DXMT renderer, with no game code and no game inputs.
+# It cannot play on its own; tools/ios/assemble_private_ipa.py adds the game payload you build from your own
+# game files and signs everything with your team. Build it with tools/ios/build-shell.sh.
+name: TF2Shell
+options:
+  deploymentTarget:
+    iOS: "18.0"
+settings:
+  base:
+    TF_BUNDLE_PREFIX: com.example
+    PRODUCT_BUNDLE_IDENTIFIER: $(TF_BUNDLE_PREFIX).titanfall.native
+    TF2_DXMT_FINGERPRINT: unset
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: NO
+    INFOPLIST_FILE: ../native-game/Info.plist
+    TARGETED_DEVICE_FAMILY: "1,2"
+    GCC_C_LANGUAGE_STANDARD: gnu17
+    PRODUCT_MODULE_NAME: TFNative
+    SWIFT_VERSION: "6.0"
+targets:
+  TF2Shell:
+    type: application
+    platform: iOS
+    sources:
+      - ../native-game/main.m
+      - ../native-game/Launcher.swift
+      - ../native-game/GameModule.m
+    dependencies:
+      - sdk: UIKit.framework
+      - sdk: Foundation.framework
+      - sdk: GameController.framework
+      - sdk: AVFAudio.framework
+      - framework: ../../../build/ios-dxmt-frameworks/winemetal.framework
+        embed: true
+      - framework: ../../../build/ios-dxmt-frameworks/dxgi.framework
+        embed: true
+      - framework: ../../../build/ios-dxmt-frameworks/d3d11.framework
+        embed: true
+    settings:
+      base:
+        PRODUCT_NAME: TFNative
+        CODE_SIGN_ENTITLEMENTS: ../native-game/TFNative.entitlements
+        GCC_PREPROCESSOR_DEFINITIONS: $(inherited) TF_SPLIT_PAYLOAD=1 TF2_DXMT_FINGERPRINT=\"$(TF2_DXMT_FINGERPRINT)\"
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/../payload
+          - $(SRCROOT)/../../../third_party/dxmt/include/native

@@ -11,7 +11,8 @@ to stage your own game files onto the device. There is no emulator, JIT, Wine or
 on the iPad.
 
 [**Install from scratch →**](#install-from-scratch) · [Current status](#current-status) ·
-[Requirements](docs/REQUIREMENTS.md) · [Why there is no IPA](docs/RELEASE.md) · [Troubleshooting](#troubleshooting) ·
+[Requirements](docs/REQUIREMENTS.md) · [Why there is no IPA](docs/RELEASE.md) · [Shell and private payload](docs/PRIVATE-IPA.md) ·
+[Troubleshooting](#troubleshooting) ·
 [Port details](PORTING.md) · [Mac (upstream)](docs/MAC.md)
 
 **You need your own copy of Titanfall 2 for PC and a paid Apple Developer Program membership.** This repository ships
@@ -61,7 +62,7 @@ on a device. Each moves to the status table above only after it has been tested 
 | **iCloud saves**, as in Dark Eco | Not in this build; saves are local only. The requirements are in [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md#bundle-identifiers-teams-and-icloud-saves). |
 | Campaign beyond *The Pilot's Gauntlet* | Not working: later levels are not staged, and moving on after the Gauntlet crashes. |
 | **Northstar** online play on iPad | Not in this build; see [Online play and VR](#online-play-and-vr). |
-| Downloadable **IPA** | Will not be published: a playable app contains translated game code ([docs/RELEASE.md](docs/RELEASE.md)). You can package your own build for your own devices. |
+| Downloadable **IPA** | A playable IPA will never be published, because it contains translated game code ([docs/RELEASE.md](docs/RELEASE.md)). A public **shell** IPA without game code, completed by a game payload you build from your own files and signed with your own team, is built and signed on the Mac but **not yet run on a device** ([docs/PRIVATE-IPA.md](docs/PRIVATE-IPA.md)). |
 
 ## What you need
 

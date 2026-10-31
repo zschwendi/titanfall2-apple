@@ -38,7 +38,13 @@ codesign -d --entitlements :- "$app" 2>/dev/null > "$tmp/entitlements.plist" || 
 entitlements=$(plutil -convert json -o - "$tmp/entitlements.plist" 2>/dev/null |
     /usr/bin/python3 -I -c 'import json,sys; print(",".join(sorted(json.load(sys.stdin))))' 2>/dev/null || true)
 # Translated game modules are named after the game's DLLs (gate3/modules.def): engine_, client_, ...
-if nm -U "$app/$exe" 2>/dev/null | grep -q -E ' _(engine|client|server|materialsystem_dx11)_'; then game_code=true; else game_code=false; fi
+# Every Mach-O file counts: in a shell-plus-payload app the game is in Frameworks/TF2Game.framework.
+game_code=false
+for f in $(find "$app" -type f); do
+    file -b "$f" | grep -q 'Mach-O' || continue
+    if nm -U "$f" 2>/dev/null | grep -q -E ' _(engine|client|server|materialsystem_dx11)_[0-9a-fA-F]'; then game_code=true; break; fi
+done
+[ ! -e "$app/Frameworks/TF2Game.framework" ] || game_code=true
 
 name=$(basename "$app" .app)
 stem="$name-${version:-unversioned}-${build:-0}-$(date -u +%Y%m%d)"

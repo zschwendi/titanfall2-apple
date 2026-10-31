@@ -1,0 +1,23 @@
+# A tiny app that is never installed. Building it with your team makes Xcode create the provisioning profile,
+# entitlements and signing identity for your game's bundle identifier; tools/ios/assemble_private_ipa.py
+# signs your private TF2 app with them. It uses the game's own entitlements file.
+name: TF2Profile
+options:
+  deploymentTarget:
+    iOS: "18.0"
+targets:
+  TF2Profile:
+    type: application
+    platform: iOS
+    sources: [main.m]
+    settings:
+      base:
+        TF_BUNDLE_PREFIX: com.example
+        PRODUCT_BUNDLE_IDENTIFIER: $(TF_BUNDLE_PREFIX).titanfall.native
+        PRODUCT_NAME: TF2Profile
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: ../native-game/TFNative.entitlements
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
+        TARGETED_DEVICE_FAMILY: "1,2"

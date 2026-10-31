@@ -12,14 +12,16 @@ private final class LauncherState: ObservableObject {
     @Published var controllerName: String?
     @Published var settings = false
     let engineReady: Bool
+    let engineProblem: String?
     let launch: () -> Void
     private var previousCross = false
     private var previousMenu = false
     private var pendingLaunch = false
     private var previousController: ObjectIdentifier?
 
-    init(engineReady: Bool, launch: @escaping () -> Void) {
+    init(engineReady: Bool, engineProblem: String?, launch: @escaping () -> Void) {
         self.engineReady = engineReady
+        self.engineProblem = engineProblem
         self.launch = launch
     }
 
@@ -27,7 +29,8 @@ private final class LauncherState: ObservableObject {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let filesReady = FileManager.default.fileExists(atPath: documents.appendingPathComponent("game-files-ready.json").path)
         let nextReady = engineReady && filesReady
-        let nextDetail = nextReady ? "Ready to launch" : filesReady ? "Preparing game…" : "Transferring game files…"
+        let nextDetail = nextReady ? "Ready to launch"
+            : engineProblem ?? (filesReady ? "Preparing game…" : "Transferring game files…")
         if ready != nextReady { ready = nextReady }
         if detail != nextDetail { detail = nextDetail }
         let current = GCController.current
@@ -165,9 +168,12 @@ public final class TFLauncherController: UIViewController {
     private let state: LauncherState
     private var hosting: UIHostingController<LauncherView>?
 
-    @objc public init(engineReady: Bool, launch: @escaping () -> Void) {
-        state = LauncherState(engineReady: engineReady, launch: launch)
+    @objc public init(engineReady: Bool, engineProblem: String?, launch: @escaping () -> Void) {
+        state = LauncherState(engineReady: engineReady, engineProblem: engineProblem, launch: launch)
         super.init(nibName: nil, bundle: nil)
+    }
+    @objc public convenience init(engineReady: Bool, launch: @escaping () -> Void) {
+        self.init(engineReady: engineReady, engineProblem: nil, launch: launch)
     }
     required public init?(coder: NSCoder) { nil }
     public override func viewDidLoad() {
