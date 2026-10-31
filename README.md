@@ -10,7 +10,7 @@ UIKit game app with a small SwiftUI launcher, game-controller input through Appl
 to stage your own game files onto the device. There is no emulator, JIT, Wine or streaming PC: the game's own code runs
 on the iPad.
 
-[**Install from scratch →**](#install-from-scratch) · [Current status](#current-status) ·
+[**Install from scratch →**](#install-from-scratch) · [Current status](#current-status) · [Progress](https://github.com/zschwendi/titanfall2-apple/issues/9) ·
 [Requirements](docs/REQUIREMENTS.md) · [Why there is no IPA](docs/RELEASE.md) · [Troubleshooting](#troubleshooting) ·
 [Port details](PORTING.md) · [Mac (upstream)](docs/MAC.md)
 
@@ -29,9 +29,9 @@ As of 31 October 2026. Only what is described as tested has been run on hardware
 | **Controllers** | **DualSense works** (owner-accepted) in the menus and in the Gauntlet's timed run, with the game's controller prompts. Once, a launch started from the Mac while another app was in front got no controller input; relaunching the app fixed it. The cause is not found yet (see [Troubleshooting](#troubleshooting)). Rumble is not implemented, and there are no touch controls. |
 | **Display** | The game now draws at 1920×1080 by default, and the launcher's Settings offer sizes from 1280×720 up to the panel's native size; DXMT lists matching display modes to the game. The owner reports that resolution and smoothness improved over the earlier fixed 1280×720; that is an impression, and frame pacing on the panel has not been measured. 16:9 sizes are letterboxed; a *Fit to Screen* option that fills the panel without stretching is planned. |
 | **iPhone** | The app target includes iPhone, but no iPhone has been tested. |
-| **Vision Pro** | The iPad app installs and opens on Vision Pro as a compatible iPad app; game files were still transferring at the time of writing. **No headset gameplay has been tested.** Immersive stereo, head tracking and PSVR2 Sense controllers are not implemented in this repository. A separate native visionOS build in development has reserved the game's memory ranges with Extended Virtual Addressing and run a head-tracked immersive space at 90 Hz on the headset, but has shown no game frames yet. |
+| **Vision Pro** | The iPad app installs and opens on Vision Pro as a compatible iPad app, and the game files (1,209 files, 49.2 GB, the same set as the iPad) are on the headset, verified by path and size. **No headset gameplay has been tested** ([#3](https://github.com/zschwendi/titanfall2-apple/issues/3)). Immersive stereo, head tracking and PSVR2 Sense controllers are not implemented in this repository. A separate native visionOS build in development has reserved the game's memory ranges with Extended Virtual Addressing and run a head-tracked immersive space at 90 Hz on the headset, but has shown no game frames yet. |
 | **Mac** | Upstream's Mac build path and defaults are kept ([docs/MAC.md](docs/MAC.md)). The Mac game has not been re-tested after this fork's changes. |
-| **Multiplayer, Northstar, VR mod** | **Not supported.** The runtime is offline by design; see [Online play and VR](#online-play-and-vr). |
+| **Multiplayer, Northstar, VR mod** | **Not supported.** The runtime is offline by design; see [Online play and VR](#online-play-and-vr). Northstar progress: [#4](https://github.com/zschwendi/titanfall2-apple/issues/4). |
 
 Only the menus and *The Pilot's Gauntlet* are staged onto the device (about 49.2 GB). Later campaign levels are not
 copied, and moving on from the Gauntlet stops the game because the next mission's map is missing. No later mission, full-campaign run, long play
@@ -50,18 +50,19 @@ code and data.
 ### Requested, not in this build
 
 The owner has asked for the features below. None of them is in the published source yet, and none has been accepted
-on a device. Each moves to the status table above only after it has been tested on hardware.
+on a device. Each moves to the status table above only after it has been tested on hardware. Progress on each is
+posted in its own issue; the [tracking issue](https://github.com/zschwendi/titanfall2-apple/issues/9) lists them all.
 
 | Feature | Where it stands |
 | --- | --- |
-| App named **TF2**, with an original icon | Not in this build; the app is still called **TF Native** and has no custom icon. The icon will be original artwork, not the game's. |
-| Automatic **touch controls** when no controller is connected | Not in this build. There are no touch controls today. |
-| **Fit to Screen** without stretching | Not in this build; 16:9 sizes are letterboxed. |
-| Pause, menus, controller hot-plug, and leaving and returning to the app | Partly built, not accepted. Focus changes are handled as described in [Background, interruptions and offline play](#background-interruptions-and-offline-play); controller connect and disconnect have passed only a synthetic test. |
-| **iCloud saves**, as in Dark Eco | Not in this build; saves are local only. The requirements are in [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md#bundle-identifiers-teams-and-icloud-saves). |
-| Campaign beyond *The Pilot's Gauntlet* | Not working yet: later levels are not staged, so changing to the next mission stops the game (*unable to find map sp_crashsite*). Staging the campaign is being added and has not been tested on the device. |
-| **Northstar** online play on iPad | Not in this build; see [Online play and VR](#online-play-and-vr). |
-| Downloadable **IPA** | Will not be published: a playable app contains translated game code ([docs/RELEASE.md](docs/RELEASE.md)). You can package your own build for your own devices. |
+| App named **TF2**, with an original icon | Not in this build; the app is still called **TF Native** and has no custom icon. The icon will be original artwork, not the game's ([#9](https://github.com/zschwendi/titanfall2-apple/issues/9)). |
+| Automatic **touch controls** when no controller is connected | Not in this build. There are no touch controls today ([#5](https://github.com/zschwendi/titanfall2-apple/issues/5)). |
+| **Fit to Screen** without stretching | Not in this build; 16:9 sizes are letterboxed ([#8](https://github.com/zschwendi/titanfall2-apple/issues/8)). |
+| Pause, menus, controller hot-plug, and leaving and returning to the app | Partly built, not accepted. Focus changes are handled as described in [Background, interruptions and offline play](#background-interruptions-and-offline-play); controller connect and disconnect have passed only a synthetic test ([#6](https://github.com/zschwendi/titanfall2-apple/issues/6)). |
+| **iCloud saves**, as in Dark Eco | Not in this build; saves are local only. The requirements are in [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md#bundle-identifiers-teams-and-icloud-saves) ([#7](https://github.com/zschwendi/titanfall2-apple/issues/7)). |
+| Campaign beyond *The Pilot's Gauntlet* | Not working yet: later levels are not staged, so changing to the next mission stops the game (*unable to find map sp_crashsite*). Staging the campaign is being added and has not been tested on the device ([#1](https://github.com/zschwendi/titanfall2-apple/issues/1)). |
+| **Northstar** online play on iPad | Not in this build; see [Online play and VR](#online-play-and-vr) and [#4](https://github.com/zschwendi/titanfall2-apple/issues/4). |
+| Downloadable **IPA** | Will not be published: a playable app contains translated game code ([docs/RELEASE.md](docs/RELEASE.md)). You can package your own build for your own devices. A public shell with no game code, plus a game module you build from your own copy, is built and waiting for a device test ([#2](https://github.com/zschwendi/titanfall2-apple/issues/2)). |
 
 ## What you need
 
@@ -310,7 +311,7 @@ only on devices in its provisioning profile until that profile expires. Details:
 | The game stops with *"cannot reserve the iOS … Extended Virtual Addressing is required"* | The app was signed without the Extended Virtual Addressing entitlement. Sign with a team that grants it. |
 | No sound | Check the volume and silent mode. `game-runtime.log` has an `audio: coreaudio output` line about every 10 seconds with the frames written and their peak level. |
 | The controller does nothing in the game | Close TF Native completely and open it again from the Home Screen with the controller already connected. This happened once after a launch from the Mac while another app was in front. `game-console.log` shows `TFNative controller connected` when iPadOS hands the pad to the app. |
-| The app closes after *The Pilot's Gauntlet* ends | Known issue: later missions are not installed, so the game stops with *unable to find map sp_crashsite*. Replaying the Gauntlet works. |
+| The app closes after *The Pilot's Gauntlet* ends | Known issue: later missions are not installed, so the game stops with *unable to find map sp_crashsite*. Replaying the Gauntlet works ([#1](https://github.com/zschwendi/titanfall2-apple/issues/1)). |
 | The game module build stops on low disk | Free some space and run the same `make` command again; finished modules are kept. |
 | The iPad is out of space | The staged files need about 49.2 GB plus the app. Free space on the iPad first; nothing in this project deletes data on the device. |
 
@@ -338,13 +339,13 @@ and how each part was verified.
   Northstar is a Windows launcher that injects DLLs into the original game; that does not carry over to recompiled
   arm64 code. Online play would need real network transport, protocol and authentication work and a compatible
   server, and it would change upstream's rule that the runtime opens no network sockets. Native Northstar support for
-  iPad has been requested and is being investigated separately; nothing in this repository connects to a server yet.
+  iPad has been requested and is tracked in [#4](https://github.com/zschwendi/titanfall2-apple/issues/4); nothing in this repository connects to a server yet.
 - **Titanfall VR mod.** [CircuitLord's VR mod installer](https://github.com/CircuitLord/CircuitLordVRModInstaller) is
   open source, but the VR mod itself is a closed-source Windows plugin that relies on Northstar's hooks. Because this
   port runs precompiled arm64 functions, patching the original x86 code at run time does not change what runs. Using
   that mod would need its author's source or a separately proven adaptation.
 - **Vision Pro plan:** windowed play with a controller first, then immersive stereoscopic play with head tracking, then
-  PSVR2 Sense motion controls. None of these has been tested yet.
+  PSVR2 Sense motion controls. None of these has been tested yet ([#3](https://github.com/zschwendi/titanfall2-apple/issues/3)).
 
 ## How it works
 

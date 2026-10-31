@@ -80,6 +80,7 @@ The game itself never connects to anything.
 | Package your own signed build as an `.ipa` with `tools/ios/package-ipa.sh` | Packaging **tested** on the project's check apps; installing such an `.ipa` has not been tried |
 | Install an `.ipa` with Apple's tools | Apple documents installing exported builds on registered devices with Device Hub or Apple Configurator ([Distributing your app to registered devices](https://developer.apple.com/documentation/xcode/distributing-your-app-to-registered-devices)); **untested** here |
 | Xcode archive and export (`xcodebuild -exportArchive`, method `debugging` or `release-testing`) | Apple's documented route to export and re-sign for a team (`teamID`, `signingStyle`); **untested** here |
+| Public shell IPA (no game code) plus a game module you build and sign yourself (branch `split-payload`, [docs/PRIVATE-IPA.md](https://github.com/zschwendi/titanfall2-apple/blob/split-payload/docs/PRIVATE-IPA.md)) | Shell built and audited; the assembled private app is built and signed but **not yet tested on a device** ([#2](https://github.com/zschwendi/titanfall2-apple/issues/2)) |
 | Third-party re-signing or sideloading tools | Not documented by Apple and **unsupported** here |
 | TestFlight or App Store | **Not possible**: the app contains code translated from the game, which cannot be distributed ([docs/RELEASE.md](RELEASE.md)) |
 
