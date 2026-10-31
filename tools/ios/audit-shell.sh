@@ -3,9 +3,10 @@
 # recompiled modules' symbols (named after gate3/modules.def), the generated module table, the runtime
 # (which lives in the payload), and the payload framework itself; prints one line per finding.
 set -eu
-cd "$(dirname "$0")/../.."
 app=${1:?usage: audit-shell.sh APP}
 [ -d "$app" ] || { echo "not a directory: $app" >&2; exit 2; }
+app=$(cd "$app" && pwd -P)
+cd "$(dirname "$0")/../.."
 fail=0
 [ ! -e "$app/Frameworks/TF2Game.framework" ] || { echo "payload present: Frameworks/TF2Game.framework"; fail=1; }
 modules=$(sed -n 's/^lifted[[:space:]]*\([^.]*\)\.dll.*/\1/p' gate3/modules.def | tr -d '()' | paste -sd'|' -)

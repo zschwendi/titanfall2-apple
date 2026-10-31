@@ -6,14 +6,14 @@
 # devices and never publish or share it; the manifest records whether the app contains that code.
 # OUT_DIR must be outside this checkout so the .ipa cannot be committed by accident.
 set -eu
-cd "$(dirname "$0")/../.."
-repo=$(pwd -P)
 app=${1:?usage: package-ipa.sh APP OUT_DIR}
 out=${2:?usage: package-ipa.sh APP OUT_DIR}
 [ -d "$app" ] && [ -f "$app/Info.plist" ] || { echo "not an app bundle: $app" >&2; exit 2; }
 mkdir -p "$out"
 app=$(cd "$app" && pwd -P)
 out=$(cd "$out" && pwd -P)
+cd "$(dirname "$0")/../.."
+repo=$(pwd -P)
 case "$out/" in
     "$repo"/*) echo "refusing: $out is inside this checkout; choose a folder outside it" >&2; exit 2 ;;
 esac
