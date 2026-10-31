@@ -65,3 +65,6 @@ game.partial/
 # The links ./tfrecomp setup makes (a link is not a directory, so game/ and .venv/ above miss them)
 /game
 /.venv
+
+# Packaged iOS apps contain code translated from the game (tools/ios/package-ipa.sh writes them outside the checkout)
+*.ipa

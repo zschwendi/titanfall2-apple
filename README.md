@@ -11,11 +11,13 @@ to stage your own game files onto the device. There is no emulator, JIT, Wine or
 on the iPad.
 
 [**Install from scratch →**](#install-from-scratch) · [Current status](#current-status) ·
-[Troubleshooting](#troubleshooting) · [Port details](PORTING.md) · [Mac (upstream)](docs/MAC.md)
+[Requirements](docs/REQUIREMENTS.md) · [Why there is no IPA](docs/RELEASE.md) · [Troubleshooting](#troubleshooting) ·
+[Port details](PORTING.md) · [Mac (upstream)](docs/MAC.md)
 
-**You need your own copy of Titanfall 2 for PC.** This repository ships source code, patches and tools only. It contains
-no game files, no recompiled game code, and no signed app, IPA or TestFlight build. Everything game-derived is generated
-on your Mac from your copy and installed on your own device.
+**You need your own copy of Titanfall 2 for PC and a paid Apple Developer Program membership.** This repository ships
+source code, patches and tools only. It contains no game files, no recompiled game code, and no signed app, IPA or
+TestFlight build. A playable app always contains code translated from the game, so it cannot be published; you build it
+on your Mac from your copy and install it on your own devices ([why](docs/RELEASE.md)).
 
 ## Current status
 
@@ -45,6 +47,22 @@ come from `TF_BUNDLE_PREFIX` instead of the developer's own, no signing team or 
 also accepts a normal install folder. Rebuilding the runtime from this source reproduced the accepted build's runtime
 code and data.
 
+### Requested, not in this build
+
+The owner has asked for the features below. None of them is in the published source yet, and none has been accepted
+on a device. Each moves to the status table above only after it has been tested on hardware.
+
+| Feature | Where it stands |
+| --- | --- |
+| App named **TF2**, with an original icon | Not in this build; the app is still called **TF Native** and has no custom icon. The icon will be original artwork, not the game's. |
+| Automatic **touch controls** when no controller is connected | Not in this build. There are no touch controls today. |
+| **Fit to Screen** without stretching | Not in this build; 16:9 sizes are letterboxed. |
+| Pause, menus, controller hot-plug, and leaving and returning to the app | Partly built, not accepted. Focus changes are handled as described in [Background, interruptions and offline play](#background-interruptions-and-offline-play); controller connect and disconnect have passed only a synthetic test. |
+| **iCloud saves**, as in Dark Eco | Not in this build; saves are local only. The requirements are in [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md#bundle-identifiers-teams-and-icloud-saves). |
+| Campaign beyond *The Pilot's Gauntlet* | Not working: later levels are not staged, and moving on after the Gauntlet crashes. |
+| **Northstar** online play on iPad | Not in this build; see [Online play and VR](#online-play-and-vr). |
+| Downloadable **IPA** | Will not be published: a playable app contains translated game code ([docs/RELEASE.md](docs/RELEASE.md)). You can package your own build for your own devices. |
+
 ## What you need
 
 **Hardware**
@@ -57,9 +75,13 @@ code and data.
 
 **Accounts**
 
-- An **Apple Developer account signed in to Xcode**. The app asks for the Extended Virtual Addressing and Increased
-  Memory Limit entitlements, and it was tested with a paid Apple Developer Program team. A free Personal Team is
-  untested and may not be granted those entitlements.
+- A **paid Apple Developer Program membership**, signed in to Xcode. The game's memory layout needs the Extended
+  Virtual Addressing entitlement, which Apple's capability table does not offer to free accounts (Xcode's Personal
+  Team); without it the memory reservation fails on the device. The app also requests Increased Memory Limit, whose
+  availability to free accounts Apple does not document. We have not tried a Personal Team. Evidence, expiry periods,
+  device limits and the iCloud rules are in [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
+- The first launch of each install needs an internet connection once, for Apple's signing check (teams created after
+  6 June 2021). The game itself never connects to anything.
 - **Titanfall 2 for PC on Steam** (app 1237970). The Windows files can be downloaded on the Mac through Steam's
   console. A copy of the install folder from a Windows PC or the EA app has the same files, but only the Steam download
   has been used for the iPad.
@@ -128,18 +150,19 @@ SUMS
 tar -xf build/llvm-15.0.7.src.tar.xz -C third_party && mv third_party/llvm-15.0.7.src third_party/llvm15
 tar -xf build/cmake-15.0.7.src.tar.xz -C third_party && mv third_party/cmake-15.0.7.src third_party/cmake
 
-LLVM_OPTS="-G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_TARGETS_TO_BUILD= -DLLVM_INCLUDE_TESTS=OFF \
-  -DLLVM_INCLUDE_DOCS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_ENABLE_ZLIB=OFF \
-  -DLLVM_ENABLE_ZSTD=OFF -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_LIBXML2=OFF"
-cmake -S third_party/llvm15 -B build/llvm15-host $LLVM_OPTS
+LLVM_OPTS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_TARGETS_TO_BUILD= -DLLVM_INCLUDE_TESTS=OFF
+  -DLLVM_INCLUDE_DOCS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_ENABLE_ZLIB=OFF
+  -DLLVM_ENABLE_ZSTD=OFF -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_LIBXML2=OFF)
+cmake -S third_party/llvm15 -B build/llvm15-host "${LLVM_OPTS[@]}"
 ninja -C build/llvm15-host llvm-tblgen llvm-config
-cmake -S third_party/llvm15 -B build/llvm15-ios $LLVM_OPTS -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos \
+cmake -S third_party/llvm15 -B build/llvm15-ios "${LLVM_OPTS[@]}" -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos \
   -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=18.0 \
   -DLLVM_TABLEGEN="$PWD/build/llvm15-host/bin/llvm-tblgen"
 ninja -C build/llvm15-ios LLVMPasses
 ```
 
-The host build only provides tools; never link its libraries into the iOS build.
+The host build only provides tools; never link its libraries into the iOS build. `LLVM_OPTS` is an array so that the
+same lines work in zsh, macOS's default shell, and in bash: zsh does not split an unquoted string into words.
 
 ### 4. Patch and build DXMT for iOS
 
@@ -245,13 +268,42 @@ recently becomes player one, and input is neutral while the app is in the backgr
 | Shader cache | `Library/Caches/DXMT` |
 | Logs and diagnostics | `Documents/game-runtime.log`, `game-console.log`, `game-progress.json`, `game-result.json`, `device-info.json`, `frames/` |
 
-Deleting the app deletes its game files and saves. Install updates over the existing app instead.
+Deleting the app deletes its game files and saves. Install updates over the existing app instead. Saves are local to
+the device and to your bundle identifier: there is no iCloud sync yet, and a build with a different bundle prefix is a
+different app with its own, empty container.
+
+## Background, interruptions and offline play
+
+- When the app loses focus (the app switcher, a notification centre pull or a call), it tells the game it lost focus,
+  sets controller input to neutral and releases the audio session; on return it restores all three. iPadOS may still
+  stop the app while it is in the background. Leaving the app or locking the iPad during play **has not been tested**,
+  so save first.
+- The game is offline. It opens no network connections, and multiplayer is not available. Apple's signing check needs
+  the internet once on first launch ([requirements](docs/REQUIREMENTS.md#first-launch-needs-the-internet-once)).
+- The screen stays awake while the game runs and sleeps normally in the launcher.
+
+## Package your own build as an IPA
+
+To keep a copy of your own build, for example as a backup or to install later on your registered devices, package it
+outside the checkout:
+
+```sh
+sh tools/ios/package-ipa.sh build/ios-native-game/Build/Products/Release-iphoneos/TFNative.app ~/TF2-private-builds
+```
+
+This writes the `.ipa`, a `.sha256` checksum and a `.json` manifest; the manifest's `contains_game_code` is `true` for
+the game app. Keep it for your own devices: it contains code translated from your copy of the game, and it installs
+only on devices in its provisioning profile until that profile expires. Details: [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Troubleshooting
 
 | Symptom | What to do |
 | --- | --- |
 | Xcode cannot register the bundle identifier | Use a prefix you own, `TF_BUNDLE_PREFIX=com.yourname`, and the same one in every step. |
+| Signing fails with a Personal Team, or Extended Virtual Addressing is not offered | Apple offers that capability only to paid and Enterprise memberships ([requirements](docs/REQUIREMENTS.md)). |
+| The app does not open the first time without a network | Connect once: development-signed apps check their certificate with Apple on first launch. |
+| The app stops opening after a while | Its provisioning profile expired. Build and install again. |
+| A pasted command fails in zsh with an option error | Copy the whole block. The LLVM step uses a shell array, which works in zsh and bash; an older copy of these steps used a plain string, which zsh does not split. |
 | The install fails with a CoreDevice error while the iPad is locked | Unlock the iPad, keep it awake, and install again. |
 | *"Game files are still being transferred"* | The ready marker is missing. Finish step 7, verify, then send `game-files-ready.json`. |
 | *"Game file is missing or incomplete: …"* | The copy is incomplete. Copy `Game` again and re-run `verify-device-assets.py`. |
@@ -285,7 +337,8 @@ and how each part was verified.
   offline local profile ([docs/EA-STANDINS.md](docs/EA-STANDINS.md)), so the game's data-center search never connects.
   Northstar is a Windows launcher that injects DLLs into the original game; that does not carry over to recompiled
   arm64 code. Online play would need real network transport, protocol and authentication work and a compatible
-  server; none of that exists here.
+  server, and it would change upstream's rule that the runtime opens no network sockets. Native Northstar support for
+  iPad has been requested and is being investigated separately; nothing in this repository connects to a server yet.
 - **Titanfall VR mod.** [CircuitLord's VR mod installer](https://github.com/CircuitLord/CircuitLordVRModInstaller) is
   open source, but the VR mod itself is a closed-source Windows plugin that relies on Northstar's hooks. Because this
   port runs precompiled arm64 functions, patching the original x86 code at run time does not change what runs. Using

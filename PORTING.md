@@ -138,12 +138,14 @@ not prove Bluetooth pairing or real game controls.
 
 ## Diagnostic apps
 
-Each is a separate app with its own bundle identifier under `TF_BUNDLE_PREFIX`. Build with your team:
+Each is a separate app with its own bundle identifier under `TF_BUNDLE_PREFIX`. Set the three variables for the app
+you want (folder, project and configuration from the list below), then build with your team:
 
 ```sh
-xcodegen generate --spec tools/ios/<app>/project.yml
-xcodebuild -project tools/ios/<app>/<Project>.xcodeproj -scheme <Scheme> -configuration <Config> \
-  -destination 'generic/platform=iOS' -derivedDataPath build/ios-<app> \
+app=runtime-smoke project=TFRuntimeSmoke config=Debug
+xcodegen generate --spec "tools/ios/$app/project.yml"
+xcodebuild -project "tools/ios/$app/$project.xcodeproj" -scheme "$project" -configuration "$config" \
+  -destination 'generic/platform=iOS' -derivedDataPath "build/ios-$app" \
   DEVELOPMENT_TEAM=YOURTEAMID TF_BUNDLE_PREFIX=com.yourname -allowProvisioningUpdates build
 ```
 
