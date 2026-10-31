@@ -1,6 +1,6 @@
 # titanfall2-apple
 
-**Titanfall 2's campaign, recompiled ahead of time into native arm64 code and running on iPad. Vision Pro is next.**
+**Titanfall 2, recompiled ahead of time into native arm64 code and playable on iPad, first mission so far. Vision Pro is next.**
 
 titanfall2-apple is an unofficial port built on [titanfall2-mac](https://github.com/rkutyna/titanfall2-mac), a static
 recompiler that turns the Windows x86-64 DLLs of Titanfall 2 (the 2016 PC version) into native arm64 code and links
@@ -23,9 +23,9 @@ As of 31 October 2026. Only what is described as tested has been run on hardware
 
 | Platform | Status |
 | --- | --- |
-| **iPad** | **Runs on a physical iPad Pro 11-inch (M5), iPadOS 27.0.1.** The intro, the main menu (v2.0.11.0) and the first campaign mission, *The Pilot's Gauntlet*, load and render; captured frames and screenshots of the panel show the mission's opening cinematic and the pod's "Look at the lights" prompt. In that opening the game issued about 60 presents a second at 1280×720, with a memory footprint of about 4.6 GB. The owner confirmed that the game runs on the iPad and that **sound plays** on the latest build. |
-| **Controllers** | **Not working in the latest build.** A DualSense connects and the app sees it, but the owner reports that its input does not reach the game after the latest update. A fix is in progress; controller play has not been accepted yet. Rumble is not implemented, and there are no touch controls. |
-| **Display** | The launcher's Settings offer render sizes up to the panel's native size, and DXMT now lists matching display modes to the game. This was added after the owner reported a fixed resolution and has not been confirmed on the device yet. The owner also reported that play feels slower than 60 fps; frame pacing on the panel has not been measured yet. |
+| **iPad** | **Playable in the first mission on a physical iPad Pro 11-inch (M5), iPadOS 27.0.1, accepted by the owner.** The intro, the main menu (v2.0.11.0) and *The Pilot's Gauntlet* load, and the owner played the Gauntlet's timed run with a DualSense: **controls and sound work**. Earlier measurements at 1280×720 showed mostly 59.5 to 59.9 presents a second, with dips to 17 to 40 while the game streams or loads, and a memory footprint of about 4.6 to 5.6 GB. |
+| **Controllers** | **DualSense works** (owner-accepted) in the menus and in the Gauntlet's timed run, with the game's controller prompts. Once, a launch started from the Mac while another app was in front got no controller input; relaunching the app fixed it. The cause is not found yet (see [Troubleshooting](#troubleshooting)). Rumble is not implemented, and there are no touch controls. |
+| **Display** | The game now draws at 1920×1080 by default, and the launcher's Settings offer sizes from 1280×720 up to the panel's native size; DXMT lists matching display modes to the game. The owner reports that resolution and smoothness improved over the earlier fixed 1280×720; that is an impression, and frame pacing on the panel has not been measured. 16:9 sizes are letterboxed; a *Fit to Screen* option that fills the panel without stretching is planned. |
 | **iPhone** | The app target includes iPhone, but no iPhone has been tested. |
 | **Vision Pro** | The iPad app installs and opens on Vision Pro as a compatible iPad app; game files were still transferring at the time of writing. **No headset gameplay has been tested.** Immersive stereo, head tracking and PSVR2 Sense controllers are not implemented. |
 | **Mac** | Upstream's Mac build path and defaults are kept ([docs/MAC.md](docs/MAC.md)). The Mac game has not been re-tested after this fork's changes. |
@@ -35,14 +35,23 @@ Only the menus and *The Pilot's Gauntlet* are staged onto the device (about 49.2
 copied, so the campaign cannot continue past the first mission yet. No full-campaign run, long play session, or thermal
 and sustained-memory measurement has been done on iPad.
 
+**Known-good build.** The build the owner accepted on 31 October 2026 (app built 06:41 UTC, installed 06:54 UTC) was
+made from the source in commit
+[`3f2be79`](https://github.com/zschwendi/titanfall2-apple/commit/3f2be798f109d16321e6ac3e30bf05a610ed6576), the commit
+that added this port, together with the twelve `patches/dxmt` and
+three `patches/dxmt-ios` patches. This was checked against the build's file times, its install record and strings in
+the installed binary. The published source differs from the build only in what publishing required: bundle identifiers
+come from `TF_BUNDLE_PREFIX` instead of the developer's own, no signing team or device is hard-coded, and asset staging
+also accepts a normal install folder.
+
 ## What you need
 
 **Hardware**
 
 - An **Apple silicon Mac**. Tested with macOS 27.0 and Xcode 27.2.
 - An **iPad with an M-series chip**. Tested only on an iPad Pro 11-inch (M5) with iPadOS 27.0.1. The app targets
-  iPadOS 18 or later and used about 4.6 GB of memory in the first mission; other models are untested.
-- A **game controller** paired with the iPad, for example a DualSense (see the controller status above).
+  iPadOS 18 or later and used about 4.6 to 5.6 GB of memory in the first mission; other models are untested.
+- A **game controller** paired with the iPad. A DualSense is the tested controller.
 - A USB-C cable is recommended: the 49 GB copy also works over the local network, but more slowly.
 
 **Accounts**
@@ -215,17 +224,15 @@ size again before it starts the game.
    size; it applies the next time the game starts.
 
 The game reaches its main menu about 20 seconds after it starts, and *The Pilot's Gauntlet* takes under a minute more
-to load. The tested runs loaded the mission with the diagnostic launch in [Troubleshooting](#troubleshooting).
-Starting it from the game's own *Campaign* menu has not been tested yet, because controller input is not working in
-the latest build.
+to load. Only the menus and that mission are installed. The device runs loaded the mission with the diagnostic launch
+in [Troubleshooting](#troubleshooting); starting it from the game's own *Campaign* menu has not been tested separately.
 
 ## Controls
 
 The game sees the controller as an Xbox 360 pad (XInput). On a DualSense, Cross, Circle, Square and Triangle are A, B,
 X and Y; Options is Start; Create or a touchpad click is Back; the sticks, stick clicks, L1/R1 and the analog L2/R2
-triggers map to their XInput counterparts. The controller used most recently becomes player one, and input is neutral
-while the app is in the background. In the latest build, controller input does not reach the game yet (see
-[Current status](#current-status)).
+triggers map to their XInput counterparts. The game shows Xbox button names in its prompts. The controller used most
+recently becomes player one, and input is neutral while the app is in the background.
 
 ## Saves and files on the iPad
 
@@ -248,7 +255,7 @@ Deleting the app deletes its game files and saves. Install updates over the exis
 | *"Game file is missing or incomplete: …"* | The copy is incomplete. Copy `Game` again and re-run `verify-device-assets.py`. |
 | The game stops with *"cannot reserve the iOS … Extended Virtual Addressing is required"* | The app was signed without the Extended Virtual Addressing entitlement. Sign with a team that grants it. |
 | No sound | Check the volume and silent mode. `game-runtime.log` has an `audio: coreaudio output` line about every 10 seconds with the frames written and their peak level. |
-| The controller does nothing in the game | Known issue in the latest build (see [Current status](#current-status)). `game-console.log` shows `TFNative controller connected` when iPadOS sees the pad. |
+| The controller does nothing in the game | Close TF Native completely and open it again from the Home Screen with the controller already connected. This happened once after a launch from the Mac while another app was in front. `game-console.log` shows `TFNative controller connected` when iPadOS hands the pad to the app. |
 | The game module build stops on low disk | Free some space and run the same `make` command again; finished modules are kept. |
 | The iPad is out of space | The staged files need about 49.2 GB plus the app. Free space on the iPad first; nothing in this project deletes data on the device. |
 

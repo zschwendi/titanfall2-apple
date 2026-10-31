@@ -28,11 +28,11 @@ All device results are from one iPad Pro 11-inch (M5) with iPadOS 27.0.1.
 | Full game app | 21 game modules, 164,940 functions, none skipped, 858 objects; the 282 MB app links and signs with the Extended Virtual Addressing entitlement. On the device: 57 modules and 166,151 dispatch entries, Direct3D 11 feature level 11_1 through DXMT, Miles audio through the WASAPI stand-in. Frames show the Respawn intro (present 60) and the main menu, v2.0.11.0 (present 300), about 18 s in. |
 | First mission | With `TF_PILOT_TRAINING=1`, *The Pilot's Gauntlet* loads: first mission frame 64 to 74 s into the run, then about 60 presents a second at 1280×720 with roughly 200 to 300 draws a frame and a 4.6 GB footprint. Screenshots of the panel show the opening cinematic and the pod's "Look at the lights" prompt, 16:9 with the status bar hidden. |
 | Sound | Originally silent on iOS: the runtime's audio sink opens a CoreAudio queue only when `RT_HOST_AUDIO=coreaudio`, which the Mac launcher set and the iOS app did not. The app now sets it, and the owner confirmed audible sound on the device. |
-| Controller | A DualSense connects and becomes the current controller. The owner reported that its input does not reach the game in the latest build; that is being fixed and is not accepted. |
+| Controller | Owner-accepted: the DualSense works in the menus and in the Gauntlet's timed run, which was played on the device. One launch started from the Mac while another app was frontmost got no controller input; relaunching fixed it, and the cause is not yet found. |
+| Resolution | The default render size is now 1920×1080 (it was a fixed 1280×720), with a Settings choice up to the panel's size. The owner reports that resolution and smoothness improved; that is an impression, not a measurement. Earlier 10-second windows at 1280×720 showed mostly 59.5 to 59.9 presents a second, with dips to 17 to 40 during streaming and loads, a footprint of about 5.6 GB, and thermal state "fair" during a 20-second trace. |
 
-Not yet verified: controller gameplay, starting the mission from the game's own menus, the new resolution choices on
-the device, frame pacing on the panel, sustained memory and thermal behaviour, later campaign levels, any iPhone, and
-any gameplay on Vision Pro.
+Not yet verified: starting the mission from the game's own menus, frame pacing on the panel, sustained memory and
+thermal behaviour, later campaign levels, any iPhone, and any gameplay on Vision Pro.
 
 ## Runtime changes
 
