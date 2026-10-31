@@ -23,7 +23,7 @@ As of 31 October 2026. Only what is described as tested has been run on hardware
 
 | Platform | Status |
 | --- | --- |
-| **iPad** | **Playable in the first mission on a physical iPad Pro 11-inch (M5), iPadOS 27.0.1, accepted by the owner.** The intro, the main menu (v2.0.11.0) and *The Pilot's Gauntlet* load, and the owner played the Gauntlet's timed run with a DualSense: **controls and sound work**. Earlier measurements at 1280×720 showed mostly 59.5 to 59.9 presents a second, with dips to 17 to 40 while the game streams or loads, and a memory footprint of about 4.6 to 5.6 GB. |
+| **iPad** | **Accepted by the owner on a physical iPad Pro 11-inch (M5), iPadOS 27.0.1: the main menu and *The Pilot's Gauntlet*, with sound and DualSense controls.** The intro, the main menu (v2.0.11.0) and the Gauntlet load, and the owner played the Gauntlet's timed run with a DualSense. **The campaign beyond the Gauntlet is not installed or working yet:** when the owner finished the Gauntlet and the game moved on to the next mission, the app crashed (SIGABRT). Only the menu and Gauntlet files are on the device, so a missing next-mission file is the leading suspect; that is not proven yet. Earlier measurements at 1280×720 showed mostly 59.5 to 59.9 presents a second, with dips to 17 to 40 while the game streams or loads, and a memory footprint of about 4.6 to 5.6 GB. |
 | **Controllers** | **DualSense works** (owner-accepted) in the menus and in the Gauntlet's timed run, with the game's controller prompts. Once, a launch started from the Mac while another app was in front got no controller input; relaunching the app fixed it. The cause is not found yet (see [Troubleshooting](#troubleshooting)). Rumble is not implemented, and there are no touch controls. |
 | **Display** | The game now draws at 1920×1080 by default, and the launcher's Settings offer sizes from 1280×720 up to the panel's native size; DXMT lists matching display modes to the game. The owner reports that resolution and smoothness improved over the earlier fixed 1280×720; that is an impression, and frame pacing on the panel has not been measured. 16:9 sizes are letterboxed; a *Fit to Screen* option that fills the panel without stretching is planned. |
 | **iPhone** | The app target includes iPhone, but no iPhone has been tested. |
@@ -32,8 +32,8 @@ As of 31 October 2026. Only what is described as tested has been run on hardware
 | **Multiplayer, Northstar, VR mod** | **Not supported.** The runtime is offline by design; see [Online play and VR](#online-play-and-vr). |
 
 Only the menus and *The Pilot's Gauntlet* are staged onto the device (about 49.2 GB). Later campaign levels are not
-copied, so the campaign cannot continue past the first mission yet. No full-campaign run, long play session, or thermal
-and sustained-memory measurement has been done on iPad.
+copied, and moving on from the Gauntlet currently crashes the app. No later mission, full-campaign run, long play
+session, or thermal and sustained-memory measurement has been done on iPad.
 
 **Known-good build.** The build the owner accepted on 31 October 2026 (app built 06:41 UTC, installed 06:54 UTC) was
 made from the source in commit
@@ -42,7 +42,8 @@ that added this port, together with the twelve `patches/dxmt` and
 three `patches/dxmt-ios` patches. This was checked against the build's file times, its install record and strings in
 the installed binary. The published source differs from the build only in what publishing required: bundle identifiers
 come from `TF_BUNDLE_PREFIX` instead of the developer's own, no signing team or device is hard-coded, and asset staging
-also accepts a normal install folder.
+also accepts a normal install folder. Rebuilding the runtime from this source reproduced the accepted build's runtime
+code and data.
 
 ## What you need
 
@@ -224,7 +225,8 @@ size again before it starts the game.
    size; it applies the next time the game starts.
 
 The game reaches its main menu about 20 seconds after it starts, and *The Pilot's Gauntlet* takes under a minute more
-to load. Only the menus and that mission are installed. The device runs loaded the mission with the diagnostic launch
+to load. Only the menus and that mission are installed, and the app currently crashes when the game moves on to the
+next mission after the Gauntlet. The device runs loaded the mission with the diagnostic launch
 in [Troubleshooting](#troubleshooting); starting it from the game's own *Campaign* menu has not been tested separately.
 
 ## Controls
@@ -256,6 +258,7 @@ Deleting the app deletes its game files and saves. Install updates over the exis
 | The game stops with *"cannot reserve the iOS … Extended Virtual Addressing is required"* | The app was signed without the Extended Virtual Addressing entitlement. Sign with a team that grants it. |
 | No sound | Check the volume and silent mode. `game-runtime.log` has an `audio: coreaudio output` line about every 10 seconds with the frames written and their peak level. |
 | The controller does nothing in the game | Close TF Native completely and open it again from the Home Screen with the controller already connected. This happened once after a launch from the Mac while another app was in front. `game-console.log` shows `TFNative controller connected` when iPadOS hands the pad to the app. |
+| The app closes after *The Pilot's Gauntlet* ends | Known issue: the next mission is not installed, and moving on to it crashes the app. |
 | The game module build stops on low disk | Free some space and run the same `make` command again; finished modules are kept. |
 | The iPad is out of space | The staged files need about 49.2 GB plus the app. Free space on the iPad first; nothing in this project deletes data on the device. |
 
