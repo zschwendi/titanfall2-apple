@@ -51,7 +51,7 @@ The game itself never connects to anything.
 | Other M-series iPads | Untested. The memory footprint, not the chip, is the likely limit. |
 | iPads with A-series chips, any iPhone | Untested. An A14 iPad was tried only with the memory probe, and Guided Access blocked the launch. |
 | Minimum system | The app targets iOS/iPadOS 18.0. Only iPadOS 27.0.1 has been tested. |
-| Vision Pro (the iPad app, visionOS 27.2) | The app installs and its launcher opens, with about 6.4 GB available to it. The game has not been started there. Apple does not list visionOS for Extended Virtual Addressing, so whether the memory layout works on Vision Pro is **unknown** until it is tried. |
+| Vision Pro (the iPad app, visionOS 27.2) | The app installs and its launcher opens, with about 6.4 GB available to it. The game has not been started there. Apple does not list visionOS for Extended Virtual Addressing, but a separate native visionOS build in development reserved both of the game's arenas exactly with it on Vision Pro (**tested**; not yet in this repository). Whether the iPad app running on Vision Pro gets the same is still **untested**. |
 | Mac for building | Apple silicon, tested with macOS 27.0 and Xcode 27.2 |
 
 ## Bundle identifiers, teams and iCloud saves
