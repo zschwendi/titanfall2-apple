@@ -6,6 +6,7 @@
  * ending a thread uses (rt_thread_new, rt_thread_bind, rt_thread_finish).  CreateThread and
  * ExitThread themselves are in thread_run.c.
  */
+#include <TargetConditionals.h>
 #include <mach/mach.h>
 #include <mach/mach_traps.h>
 #include <os/lock.h>
@@ -204,6 +205,7 @@ void rt_thread_cpu_modes(RtThread *t) {
     }
     tf_fp_enter_host();             /* host code runs with the host FPCR; guest calls switch */
     if (mode == RT_TSO_OFF) return;
+#if TARGET_OS_OSX
     kern_return_t kr = thread_set_x86_64_compat(1);
     if (kr == KERN_SUCCESS) { t->tso = 1; return; }
     if (mode == RT_TSO_REQUIRE)
@@ -212,6 +214,11 @@ void rt_thread_cpu_modes(RtThread *t) {
                  "RT_TSO=try runs without it (tests only)", kr);
     rt_log(RT_CH_THREAD, RT_LL_INFO, "x86 memory-ordering mode refused for thread 0x%x (kern_return %d); "
            "continuing without it (RT_TSO=try)", t->id, kr);
+#else
+    (void)t;
+    rt_fatal("hardware x86 memory ordering is unavailable on this platform; use RT_TSO=off "
+             "only with software-ordered lifted code (GUEST_MEM=tsob)");
+#endif
 }
 
 /* ---- the two kernel objects ----------------------------------------------------------------- */

@@ -112,16 +112,27 @@ endif
 GUEST_WATCH ?=
 
 RT_CC       ?= xcrun clang
+RT_CXX      ?= $(RT_CC) -x c++
 RT_AR       ?= xcrun ar
+RT_PLATFORM ?= macos
+# Kept separate for isolated layout diagnostics; the selected ranges must be
+# available on the target OS (the iOS ranges are not portable to every Mac).
+# A different layout must use distinct RT_OUT and RT_GEN build directories.
+RT_VM_LAYOUT ?= $(if $(filter ios,$(RT_PLATFORM)),ios,macos)
 RT_OUT      ?= build/runtime
 RT_GEN      ?= build/gen
 RT_SANITIZE ?=
 RT_SAN_FLAGS := $(if $(RT_SANITIZE),-fsanitize=$(RT_SANITIZE) -fno-omit-frame-pointer)
 RT_CFLAGS   := -std=gnu17 -fno-strict-aliasing -Wall -Wextra -Werror -O2 -g \
                -Iruntime/include -Iharness -I$(RT_GEN) $(RT_SAN_FLAGS)
+ifeq ($(RT_VM_LAYOUT),ios)
+RT_CFLAGS += -DRT_VM_LAYOUT_IOS=1
+else ifneq ($(RT_VM_LAYOUT),macos)
+$(error RT_VM_LAYOUT must be macos or ios)
+endif
 RT_OBJC_CFLAGS := $(RT_CFLAGS) -fobjc-arc
 # The frameworks of the host window: on the link line of every program that links librt.a.
-RT_FRAMEWORKS := -framework AppKit -framework QuartzCore -framework Metal -framework CoreGraphics -framework AudioToolbox
+RT_FRAMEWORKS := -framework AppKit -framework Foundation -framework QuartzCore -framework Metal -framework CoreGraphics -framework AudioToolbox -framework GameController -lobjc
 RT_BASE_REF ?= wip/lifter-v0
 RT_BASE     ?=
 RT_Q        := $(if $(V),,@)
@@ -145,6 +156,12 @@ RT_CORE_SRC  := $(sort $(wildcard runtime/core/*.c))
 RT_SHIM_SRC  := $(sort $(wildcard runtime/shims/*/*.c))
 # The host window (rt/host.h): Objective-C, compiled with -fobjc-arc, so it has its own list and rule.
 RT_HOST_SRC := $(sort $(wildcard runtime/host/*.m))
+ifeq ($(RT_PLATFORM),ios)
+RT_HOST_SRC := $(filter-out runtime/host/window.m,$(RT_HOST_SRC)) runtime/host_ios/window.m
+RT_FRAMEWORKS := -framework UIKit -framework Foundation -framework QuartzCore -framework Metal -framework CoreGraphics -framework AudioToolbox -framework GameController -framework AVFAudio -lobjc
+else ifneq ($(RT_PLATFORM),macos)
+$(error RT_PLATFORM must be macos or ios)
+endif
 RT_HOST_OBJ := $(patsubst %.m,$(RT_OUT)/obj/%.o,$(RT_HOST_SRC))
 # The host's plain C (runtime/host/*.c: the speakers' sink, rt/host_audio.h): AudioToolbox, no Objective-C.
 RT_HOST_C_SRC := $(sort $(wildcard runtime/host/*.c))
@@ -266,6 +283,13 @@ RT_TEST_LIFTED := $(RT_OUT)/lifted/corpus_O1.o
 .PHONY: host-audio-tone rt rt-test rt-net-lint rt-test-build rt-test-tsan shim-check method-check core-test-check core-body-check rt-test-pending rt-imports rt-clean RT_FORCE com-desc com-desc-check d3d-layout-check
 
 rt: $(RT_OUT)/librt.a
+
+# Cross-platform port check: force every archive member into a link, so an
+# unsupported framework or unresolved runtime symbol cannot hide in the archive.
+.PHONY: rt-link-check
+rt-link-check: $(RT_OUT)/rt-link-check
+$(RT_OUT)/rt-link-check: runtime/tools/linkcheck.c $(RT_OUT)/librt.a
+	$(RT_Q)$(RT_CC) $(RT_CFLAGS) $< -Wl,-force_load,$(RT_OUT)/librt.a $(RT_FRAMEWORKS) -o $@
 
 # ---- generated code (never committed) -------------------------------------------------------
 # The list of shim files is a dependency, so that adding or deleting a shim regenerates the

@@ -1,0 +1,5 @@
+regex:^bin[/\\]x64_retail[/\\][^/\\]+\.dll$
+regex:^server\.dll$
+regex:^r2[/\\]paks[/\\]Win64[/\\][^/\\]+\.dll$
+build.txt
+gameversion.txt

@@ -111,6 +111,10 @@ struct RtHostAudio {
     unsigned long long takes;      /* device takes, under mu */
     unsigned long long underrun;   /* frames of silence the device was given, under mu */
     unsigned long long stalls;     /* writes that gave up after 2 s, under mu */
+    /* Evidence that sound reaches the device, logged about every 10 s by the writer: frames
+     * written and their peak since the last line, against the device's takes. */
+    unsigned long long written, logged_takes, logged_underrun;
+    float peak;
 };
 
 /* Fills one buffer from the ring, silence for what is missing, and enqueues it again. */
@@ -156,15 +160,34 @@ static int wait_for_room(RtHostAudio *a)
     return 0;
 }
 
-static void clamp_copy(float *dst, const float *src, size_t n)
+static float clamp_copy(float *dst, const float *src, size_t n)
 {
+    float peak = 0.0f;
     for (size_t i = 0; i < n; i++) {
         float v = src[i];
         if (v != v) v = 0.0f;          /* NaN */
         if (v > 1.0f) v = 1.0f;
         if (v < -1.0f) v = -1.0f;
         dst[i] = v;
+        if (v > peak) peak = v;
+        if (-v > peak) peak = -v;
     }
+    return peak;
+}
+
+/* About every 10 s of device takes: one line of what was written and what the device took. */
+static void log_progress(RtHostAudio *a)
+{
+    pthread_mutex_lock(&a->mu);
+    unsigned long long takes = a->takes - a->logged_takes, under = a->underrun - a->logged_underrun;
+    if (takes < 1000) { pthread_mutex_unlock(&a->mu); return; }
+    unsigned long long written = a->written;
+    float peak = a->peak;
+    a->logged_takes = a->takes; a->logged_underrun = a->underrun; a->written = 0; a->peak = 0.0f;
+    unsigned long long stalls = a->stalls;
+    pthread_mutex_unlock(&a->mu);
+    rt_log(RT_CH_FILE, RT_LL_INFO, "audio: coreaudio output: %llu frames written (peak %.3f); the device took %llu buffers, "
+           "%llu frames of them silence for want of data; %llu stalls so far", written, (double)peak, takes, under, stalls);
 }
 
 RtHostAudio *rt_host_audio_open(unsigned rate, unsigned channels, float volume)
@@ -242,23 +265,30 @@ void rt_host_audio_write(RtHostAudio *a, const float *interleaved, unsigned fram
     while (done < frames) {
         unsigned k = frames - done;
         if (k > a->cap) k = a->cap;
-        clamp_copy(a->scratch, interleaved + (size_t)done * a->ch, (size_t)k * a->ch);
+        float peak = clamp_copy(a->scratch, interleaved + (size_t)done * a->ch, (size_t)k * a->ch);
         unsigned off = 0;
         while (off < k) {
             pthread_mutex_lock(&a->mu);
             if (wait_for_room(a) < 0) {
                 a->stalls++;
                 pthread_mutex_unlock(&a->mu);
+                /* The device stopped taking (an iOS audio-session interruption stops the
+                 * queue); starting it again resumes output once the session is back. */
+                OSStatus st = AudioQueueStart(a->q, NULL);
+                rt_log(RT_CH_FILE, RT_LL_WARN, "audio: coreaudio took nothing for 2 s; restarting the queue (%d)", (int)st);
                 return;
             }
             unsigned room = a->cap - ring_count(&a->ring);
             unsigned put = k - off < room ? k - off : room;
             ring_put(&a->ring, a->scratch + (size_t)off * a->ch, put);   /* put <= room: fits */
+            a->written += put;
+            if (peak > a->peak) a->peak = peak;
             pthread_mutex_unlock(&a->mu);
             off += put;
         }
         done += k;
     }
+    log_progress(a);
 }
 
 void rt_host_audio_close(RtHostAudio *a)

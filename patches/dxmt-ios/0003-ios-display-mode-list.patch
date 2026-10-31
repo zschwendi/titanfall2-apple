@@ -1,0 +1,32 @@
+--- a/src/util/wsi_monitor_ios.cpp	2026-10-31 00:41:04
++++ b/src/util/wsi_monitor_ios.cpp	2026-10-31 00:41:04
+@@ -39,8 +39,28 @@
+ bool getDesktopDisplayMode(HMONITOR monitor, WsiMode *mode) {
+   return getCurrentDisplayMode(monitor, mode);
+ }
++// The app's screen is one fixed panel; offer the usual game sizes that fit
++// inside it, then the panel's own size, as a desktop monitor's list would.
+ bool getDisplayMode(HMONITOR monitor, uint32_t index, WsiMode *mode) {
+-  return index == 0 && getCurrentDisplayMode(monitor, mode);
++  static const uint32_t sizes[][2] = {{1280, 720},  {1280, 800},  {1600, 900},  {1680, 1050},
++                                      {1920, 1080}, {1920, 1200}, {2240, 1260}, {2560, 1440},
++                                      {2560, 1600}};
++  WsiMode current;
++  if (!mode || !getCurrentDisplayMode(monitor, &current)) return false;
++  for (const auto &size : sizes) {
++    if (size[0] > current.width || size[1] > current.height ||
++        (size[0] == current.width && size[1] == current.height))
++      continue;
++    if (index-- == 0) {
++      *mode = current;
++      mode->width = size[0];
++      mode->height = size[1];
++      return true;
++    }
++  }
++  if (index != 0) return false;
++  *mode = current;
++  return true;
+ }
+ 
+ } // namespace dxmt::wsi

@@ -4,9 +4,13 @@
  * Everything whose address the guest sees comes from one of two ranges reserved by
  * rt_vm_init before anything else runs, both below 8 TB:
  *
- *   image arena  0x0000_0100_0000_0000, 4 GiB    lifted modules, then native modules
- *   VM arena     0x0000_0110_0000_0000, 256 GiB  VirtualAlloc, file views, guest stacks,
- *                                                thread blocks, TLS blocks
+ *   macOS image arena  0x0000_0100_0000_0000, 4 GiB
+ *   macOS VM arena     0x0000_0110_0000_0000, 256 GiB
+ *   iOS image arena    448 GiB, 4 GiB
+ *   iOS VM arena       456 GiB, 16 GiB (requires Extended Virtual Addressing)
+ * Images contain lifted and native modules; the VM arena contains VirtualAlloc,
+ * file views, guest stacks, thread blocks and TLS blocks. A layout is selected
+ * at build time, never silently relocated at startup.
  *
  * The guest is told pages are 4 KB and the allocation granularity is 64 KB; the host has
  * 16 KB pages.  The runtime never hard-codes the host page size: ask rt_vm_host_page().
@@ -56,10 +60,23 @@
 #include "rt/wintypes.h"
 #include "rt/win/memory.h"
 
+/* Physical M5 iPad, iOS 27.0.1: the Mac's 1 TiB addresses are invalid and
+ * ordinary mmap hints are relocated. Extended Virtual Addressing plus fixed,
+ * non-overwriting vm_map reservations accepted this smaller layout. Other
+ * devices and the game's peak allocation still need validation. */
+#define RT_IOS_IMAGE_ARENA_BASE (UINT64_C(448) << 30)
+#define RT_IOS_VM_ARENA_BASE    (UINT64_C(456) << 30)
+#define RT_IOS_VM_ARENA_SIZE    (UINT64_C(16) << 30)
+#define RT_IMAGE_ARENA_SIZE     (UINT64_C(4) << 30)
+#if defined(RT_VM_LAYOUT_IOS) && RT_VM_LAYOUT_IOS
+#define RT_IMAGE_ARENA_BASE  RT_IOS_IMAGE_ARENA_BASE
+#define RT_VM_ARENA_BASE     RT_IOS_VM_ARENA_BASE
+#define RT_VM_ARENA_SIZE     RT_IOS_VM_ARENA_SIZE
+#else
 #define RT_IMAGE_ARENA_BASE  UINT64_C(0x0000010000000000)
-#define RT_IMAGE_ARENA_SIZE  (UINT64_C(4) << 30)
 #define RT_VM_ARENA_BASE     UINT64_C(0x0000011000000000)
 #define RT_VM_ARENA_SIZE     (UINT64_C(256) << 30)
+#endif
 
 /* What VirtualQuery reports in MEMORY_BASIC_INFORMATION.Type for a region.  Also who owns
  * the region: only its owner's calls change it (see WHO CALLS WHAT). */

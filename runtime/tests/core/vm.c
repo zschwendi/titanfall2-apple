@@ -20,8 +20,13 @@ static bool all_zero(uint64_t p, uint64_t n) {
 TEST(core, vm_arenas)
 {
     /* Section 1.2: two fixed ranges, both below 8 TB. */
+#if defined(RT_VM_LAYOUT_IOS) && RT_VM_LAYOUT_IOS
+    T_EQ(RT_IMAGE_ARENA_BASE, UINT64_C(448) << 30);
+    T_EQ(RT_VM_ARENA_BASE, UINT64_C(456) << 30);
+#else
     T_EQ(RT_IMAGE_ARENA_BASE, UINT64_C(0x010000000000));
     T_EQ(RT_VM_ARENA_BASE, UINT64_C(0x011000000000));
+#endif
     T_TRUE(RT_VM_ARENA_BASE + RT_VM_ARENA_SIZE <= UINT64_C(0x80000000000));
     T_TRUE(RT_IMAGE_ARENA_BASE + RT_IMAGE_ARENA_SIZE <= RT_VM_ARENA_BASE);
     T_TRUE(rt_vm_in_image_arena(RT_IMAGE_ARENA_BASE) && !rt_vm_in_image_arena(RT_IMAGE_ARENA_BASE - 1));
@@ -66,7 +71,7 @@ TEST(core, vm_alloc_and_free)
     T_EQ(rt_vm_alloc(want, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE, RT_VM_PRIVATE), 0);     /* taken */
     T_EQ(T_LAST_ERROR(), ERROR_INVALID_ADDRESS);
     rt_set_last_error(T_CTX(), 0);
-    T_EQ(rt_vm_alloc(0x7000000000, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE, RT_VM_PRIVATE), 0);   /* outside the arenas */
+    T_EQ(rt_vm_alloc(RT_VM_ARENA_BASE - 0x10000, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE, RT_VM_PRIVATE), 0);   /* outside the arenas */
     T_EQ(T_LAST_ERROR(), ERROR_INVALID_ADDRESS);
 
     /* Bad arguments fail with a Win32 error; they do not trap. */

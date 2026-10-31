@@ -59,7 +59,7 @@ DXB_LIBS := -lc++
 $(RT_OUT)/obj/runtime/dxback/%.o: runtime/dxback/%.cpp runtime/include/rt/d3dback.h
 	@mkdir -p $(dir $@)
 	$(if $(V),,@echo "  CXX   $<")
-	$(RT_Q)xcrun clang++ -std=c++20 -w $(DXB_INC) -MMD -MP -c $< -o $@
+	$(RT_Q)$(RT_CXX) -std=c++20 -w $(DXB_INC) -MMD -MP -c $< -o $@
 
 -include $(DXB_OBJS:.o=.d)
 endif

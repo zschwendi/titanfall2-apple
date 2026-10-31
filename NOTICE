@@ -1,8 +1,10 @@
-titanfall2-mac: notices
+titanfall2-apple: notices
+
+titanfall2-apple is based on titanfall2-mac (https://github.com/rkutyna/titanfall2-mac, MIT).
 
 This repository's own code and documents are under the MIT License (LICENSE), except as listed here.
 
-- patches/dxmt/*.patch: changes to DXMT (https://github.com/3Shain/dxmt), which is free software under the
+- patches/dxmt/*.patch and patches/dxmt-ios/*.patch: changes to DXMT (https://github.com/3Shain/dxmt), which is free software under the
   GNU Lesser General Public License, version 2.1 or (at your option) any later version. The patches are
   under the same licence. DXMT itself is not in this repository: `./tfrecomp setup` clones it.
 - runtime/com/desc/*.idef: lists of Direct3D 11, DXGI, XAudio2 and MMDevice interface names, interface IDs,
@@ -11,6 +13,10 @@ This repository's own code and documents are under the MIT License (LICENSE), ex
 - Python packages used at build and test time, installed by `./tfrecomp setup` and not included here:
   capstone (BSD) and unicorn (GPL-2.0).
 - tools/shaderxc builds against Unity's HLSLcc (MIT), which it expects in third_party/ and does not include.
+- The iOS build compiles LLVM 15.0.7 (Apache License 2.0 with LLVM Exceptions), which the build instructions
+  download into third_party/; no LLVM code is in this repository.
+- tools/ios/*/project.yml are XcodeGen (MIT) specifications; XcodeGen is not included.
+- tools/ios/fetch-engine.command runs DepotDownloader (GPL-2.0), which the user installs; it is not included.
 
 Titanfall is a trademark of Electronic Arts Inc. This project is not affiliated with or endorsed by
 Electronic Arts or Respawn Entertainment. It contains no game files and nothing taken from them; you need

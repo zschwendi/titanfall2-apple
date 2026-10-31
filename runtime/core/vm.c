@@ -63,7 +63,7 @@
  */
 #include <errno.h>
 #include <mach/mach.h>
-#include <mach/mach_vm.h>
+#include <mach/vm_map.h>
 #include <os/lock.h>
 #include <stdlib.h>
 #include <string.h>
@@ -135,6 +135,19 @@ static const char *type_name(RtVmType t) {
 /* ---- start-up ---------------------------------------------------------------------------- */
 
 static void reserve_arena(uint64_t base, uint64_t size, const char *what) {
+#if defined(RT_VM_LAYOUT_IOS) && RT_VM_LAYOUT_IOS
+    _Static_assert(sizeof(vm_address_t) == sizeof(uint64_t), "64-bit VM API required");
+    vm_address_t address = (vm_address_t)base;
+    /* FIXED alone refuses collisions. Never use VM_FLAGS_OVERWRITE or mmap's
+     * MAP_FIXED to acquire an arena: they could destroy an unrelated mapping. */
+    kern_return_t kr = vm_map(mach_task_self(), &address, (vm_size_t)size, 0,
+        VM_FLAGS_FIXED, MACH_PORT_NULL, 0, FALSE, VM_PROT_NONE,
+        VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
+    if (kr != KERN_SUCCESS || address != base)
+        rt_fatal("cannot reserve the iOS %s (%llu GiB at %#llx), Mach error %d; "
+                 "Extended Virtual Addressing is required and the range must be free",
+                 what, (unsigned long long)(size >> 30), (unsigned long long)base, kr);
+#else
     void *p = mmap((void *)(uintptr_t)base, size, PROT_NONE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
     if (p == MAP_FAILED)
         rt_fatal("cannot reserve the %s (%llu GiB at %#llx)", what, (unsigned long long)(size >> 30),
@@ -143,6 +156,7 @@ static void reserve_arena(uint64_t base, uint64_t size, const char *what) {
         rt_fatal("the %s must be at %#llx but that range is taken (the kernel offered %p); every guest "
                  "address of the build depends on it (docs/RUNTIME.md section 1.2)",
                  what, (unsigned long long)base, p);
+#endif
 }
 
 void rt_vm_init(void) {
@@ -409,16 +423,16 @@ static bool in_arena(uint64_t a) { return rt_vm_in_image_arena(a) || rt_vm_in_vm
 /* Ask the kernel for the host mapping that contains `addr` or, failing that, the next one
  * above it.  False if there is none at or above addr. */
 static bool host_region(uint64_t addr, uint64_t *start, uint64_t *end, int *prot) {
-    mach_vm_address_t a = addr;
-    mach_vm_size_t size = 0;
+    vm_address_t a = addr;
+    vm_size_t size = 0;
     vm_region_basic_info_data_64_t info;
     mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
     mach_port_t object = MACH_PORT_NULL;
-    kern_return_t kr = mach_vm_region(mach_task_self(), &a, &size, VM_REGION_BASIC_INFO_64,
+    kern_return_t kr = vm_region_64(mach_task_self(), &a, &size, VM_REGION_BASIC_INFO_64,
                                       (vm_region_info_t)&info, &count, &object);
     if (object != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), object);
     if (kr == KERN_INVALID_ADDRESS) return false;
-    if (kr != KERN_SUCCESS) rt_fatal("mach_vm_region(%#llx) failed: kern_return %d", (unsigned long long)addr, kr);
+    if (kr != KERN_SUCCESS) rt_fatal("vm_region_64(%#llx) failed: kern_return %d", (unsigned long long)addr, kr);
     *start = a;
     *end = a + size;
     *prot = info.protection;

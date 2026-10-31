@@ -37,6 +37,10 @@ static inline bool dxmt_load(const std::string &dir, Dxmt *out) {
     dxgi_path = dir + "/dxgi.dylib";
     d3d11_path = dir + "/d3d11.dylib";
   }
+  if (access(dxgi_path.c_str(), R_OK) != 0) {
+    dxgi_path = dir + "/dxgi.framework/dxgi";
+    d3d11_path = dir + "/d3d11.framework/d3d11";
+  }
   out->dxgi = dlopen(dxgi_path.c_str(), RTLD_NOW | RTLD_GLOBAL);
   if (!out->dxgi) {
     fprintf(stderr, "dlopen %s: %s\n", dxgi_path.c_str(), dlerror());

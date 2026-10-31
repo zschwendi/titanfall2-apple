@@ -28,10 +28,10 @@ static void mode_once(void)
 {
     const char *v = getenv("RT_HOST_WINDOW");
     if (!v || strcmp(v, "none") == 0) g_mode = HOST_NONE;
-    else if (strcmp(v, "appkit") == 0) g_mode = HOST_SHOWN;
+    else if (strcmp(v, "appkit") == 0 || strcmp(v, "uikit") == 0) g_mode = HOST_SHOWN;
     else if (strcmp(v, "appkit-hidden") == 0) g_mode = HOST_HIDDEN;
     else if (strcmp(v, "appkit-fullscreen") == 0) g_mode = HOST_FULLSCREEN;
-    else rt_fatal("RT_HOST_WINDOW=%s: not a value; the values are appkit, appkit-hidden, appkit-fullscreen, none (or unset)", v);
+    else rt_fatal("RT_HOST_WINDOW=%s: not a value; the values are appkit, appkit-hidden, appkit-fullscreen, uikit, none (or unset)", v);
 
     const char *s = getenv("RT_HOST_SCREEN");
     if (!s || strcmp(s, "main") == 0) g_builtin_screen = false;

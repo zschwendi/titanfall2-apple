@@ -1,0 +1,39 @@
+name: TFRuntimeSmoke
+options:
+  deploymentTarget:
+    iOS: "18.0"
+targets:
+  TFRuntimeSmoke:
+    type: application
+    platform: iOS
+    sources:
+      - main.m
+      - RuntimeCheck.c
+      - RuntimeCheck.h
+    dependencies:
+      - sdk: UIKit.framework
+      - sdk: Foundation.framework
+      - sdk: Metal.framework
+      - sdk: QuartzCore.framework
+      - sdk: CoreGraphics.framework
+      - sdk: GameController.framework
+      - sdk: AudioToolbox.framework
+      - sdk: AVFAudio.framework
+    settings:
+      base:
+        TF_BUNDLE_PREFIX: com.example
+        PRODUCT_BUNDLE_IDENTIFIER: $(TF_BUNDLE_PREFIX).titanfall.runtimesmoke
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: ../vm-probe/Extended.entitlements
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: TF Runtime Check
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/../../../runtime/include
+          - $(SRCROOT)/../../../harness
+        GCC_PREPROCESSOR_DEFINITIONS: $(inherited) RT_VM_LAYOUT_IOS=1
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -Wl,-force_load,$(SRCROOT)/../../../build/ios-iphoneos/runtime/librt.a

@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <mach/mach.h>
-#include <mach/mach_vm.h>
+#include <mach/vm_map.h>
 
 #include "core.h"
 #include "report.h"
@@ -496,13 +496,15 @@ static bool readable(uint64_t addr, uint64_t len) {
     if (rt_report_readable(addr, len)) return true;
     if (rt_vm_in_vm_arena(addr) || rt_module_from_address(addr)) return false;
     for (uint64_t at = addr; at < addr + len;) {
-        mach_vm_address_t a = at;
-        mach_vm_size_t size = 0;
+        vm_address_t a = at;
+        vm_size_t size = 0;
         vm_region_basic_info_data_64_t info;
         mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
         mach_port_t object = MACH_PORT_NULL;
-        if (mach_vm_region(mach_task_self(), &a, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &count,
-                           &object) != KERN_SUCCESS) return false;
+        kern_return_t result = vm_region_64(mach_task_self(), &a, &size, VM_REGION_BASIC_INFO_64,
+                                           (vm_region_info_t)&info, &count, &object);
+        if (object != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), object);
+        if (result != KERN_SUCCESS) return false;
         if (a > at || !(info.protection & VM_PROT_READ)) return false;
         at = a + size;
     }

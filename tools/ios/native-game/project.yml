@@ -1,0 +1,70 @@
+name: TFNative
+options:
+  deploymentTarget:
+    iOS: "18.0"
+settings:
+  base:
+    TF_BUNDLE_PREFIX: com.example
+    PRODUCT_BUNDLE_IDENTIFIER: $(TF_BUNDLE_PREFIX).titanfall.native
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: NO
+    INFOPLIST_FILE: Info.plist
+    TARGETED_DEVICE_FAMILY: "1,2"
+    GCC_C_LANGUAGE_STANDARD: gnu17
+    CLANG_CXX_LANGUAGE_STANDARD: c++20
+    PRODUCT_MODULE_NAME: TFNative
+    SWIFT_VERSION: "6.0"
+targets:
+  TFAssetSetup:
+    type: application
+    platform: iOS
+    sources: [main.m, Launcher.swift]
+    settings:
+      base:
+        PRODUCT_NAME: TFNative
+        GCC_PREPROCESSOR_DEFINITIONS: $(inherited) TF_ASSET_STAGE_ONLY=1
+    dependencies:
+      - sdk: UIKit.framework
+      - sdk: GameController.framework
+  TFNative:
+    type: application
+    platform: iOS
+    sources:
+      - main.m
+      - Launcher.swift
+      - path: ../../../gate3/run.c
+      - path: ../../../build/ios-game/gen/gate3_table.c
+      - path: ../../../runtime/dxback
+    dependencies:
+      - sdk: UIKit.framework
+      - sdk: Foundation.framework
+      - sdk: Metal.framework
+      - sdk: QuartzCore.framework
+      - sdk: CoreGraphics.framework
+      - sdk: GameController.framework
+      - sdk: AudioToolbox.framework
+      - sdk: AVFAudio.framework
+      - framework: ../../../build/ios-dxmt-frameworks/winemetal.framework
+        embed: true
+      - framework: ../../../build/ios-dxmt-frameworks/dxgi.framework
+        embed: true
+      - framework: ../../../build/ios-dxmt-frameworks/d3d11.framework
+        embed: true
+    settings:
+      base:
+        CODE_SIGN_ENTITLEMENTS: TFNative.entitlements
+        GCC_PREPROCESSOR_DEFINITIONS: $(inherited) RT_EMBEDDED_APP=1 RT_VM_LAYOUT_IOS=1 GATE3_INSTALL_ROOT=\"\" GATE3_RUN_OUT=\"\"
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/../../../third_party/dxmt/include/native/windows
+          - $(SRCROOT)/../../../third_party/dxmt/include/native/directx
+          - $(SRCROOT)/../../../third_party/dxmt/include/native
+          - $(SRCROOT)/../../../runtime/include
+          - $(SRCROOT)/../../../harness
+          - $(SRCROOT)/../../../gate2
+          - $(SRCROOT)/../../../gate3
+          - $(SRCROOT)/../../../build/ios-iphoneos/gen
+          - $(SRCROOT)/../../../build/ios-game/gen
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -Wl,-force_load,$(SRCROOT)/../../../build/ios-iphoneos/runtime/librt.a
+          - -Wl,-filelist,$(SRCROOT)/../../../build/ios-game/lifted/objects.filelist

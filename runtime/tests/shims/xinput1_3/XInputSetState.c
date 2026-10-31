@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "rt/test.h"
+#include "rt/gamepad.h"
 
 TEST(xinput1_3, XInputSetState)
 {
@@ -28,6 +29,17 @@ TEST(xinput1_3, XInputSetState)
     CALL(kernel32, SetLastError, 0x1234);
     T_EQ(CALL(xinput1_3, XInputSetState, 0, box.s), 1167);
     T_EQ(T_LAST_ERROR(), 0x1234);
+
+    T_CASE("connected controller reports unsupported rumble");
+    RtGamepad pad={0};
+    RtGamepadVibration vibration={ .left_motor=65535 };
+    rt_gamepad_publish(0, &pad);
+    T_EQ(CALL(xinput1_3, XInputSetState, 0, &vibration), 50);
+    T_EQ(vibration.left_motor, 65535);
+    T_EQ(T_LAST_ERROR(), 0x1234);
+    vibration.left_motor=0;
+    T_EQ(CALL(xinput1_3, XInputSetState, 0, &vibration), 0);
+    rt_gamepad_disconnect(0);
 
     T_TRAPS(CALL(xinput1_3, XInputSetState, 4, box.s), "XInputSetState with user index 4, above 3");
     T_TRAPS(CALL(xinput1_3, XInputSetState, 0, NULL), "XInputSetState with a NULL pVibration");

@@ -1,0 +1,37 @@
+name: TFRendererCheck
+options:
+  deploymentTarget:
+    iOS: "18.0"
+targets:
+  TFRendererCheck:
+    type: application
+    platform: iOS
+    sources:
+      - main.m
+      - RendererCheck.cpp
+      - RendererCheck.h
+    dependencies:
+      - sdk: UIKit.framework
+      - sdk: Foundation.framework
+      - framework: ../../../build/ios-dxmt-frameworks/winemetal.framework
+        embed: true
+      - framework: ../../../build/ios-dxmt-frameworks/dxgi.framework
+        embed: true
+      - framework: ../../../build/ios-dxmt-frameworks/d3d11.framework
+        embed: true
+    settings:
+      base:
+        TF_BUNDLE_PREFIX: com.example
+        PRODUCT_BUNDLE_IDENTIFIER: $(TF_BUNDLE_PREFIX).titanfall.renderercheck
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: TF Renderer Check
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CLANG_CXX_LANGUAGE_STANDARD: c++20
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/../../../third_party/dxmt/include/native/windows
+          - $(SRCROOT)/../../../third_party/dxmt/include/native/directx
+          - $(SRCROOT)/../../../third_party/dxmt/include/native

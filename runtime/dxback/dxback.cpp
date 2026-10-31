@@ -143,9 +143,12 @@ static const RtD3dBack *build_table(void) {
     }
 
     const char *names[3] = {"winemetal.dylib", "dxgi.dylib", "d3d11.dylib"};
+    const char *frameworks[3] = {"winemetal.framework/winemetal", "dxgi.framework/dxgi", "d3d11.framework/d3d11"};
     void *handles[3] = {};
     for (int i = 0; i < 3; i++) {
         std::string path = std::string(dir) + "/" + names[i];
+        if (access(path.c_str(), R_OK) != 0)
+            path = std::string(dir) + "/" + frameworks[i];
         handles[i] = dlopen(path.c_str(), RTLD_NOW | RTLD_GLOBAL);
         if (!handles[i]) rt_fatal("dxback: dlopen of %s failed: %s", path.c_str(), dlerror());
     }

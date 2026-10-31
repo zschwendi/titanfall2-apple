@@ -251,7 +251,9 @@
 #include <unistd.h>
 #include <mach-o/dyld.h>
 #include <mach/mach.h>
+#ifndef RT_EMBEDDED_APP
 #include <mach/mach_vm.h>
+#endif
 #include <pthread.h>
 #include <time.h>
 
@@ -436,9 +438,16 @@ static uint64_t run_t0_ns, run_last_present_ns;
 static char run_state_dir[1024];        /* this run's working copy (THE STATE) */
 
 static bool ui_rd(uint64_t a, void *out, size_t n) {
+#ifdef RT_EMBEDDED_APP
+    vm_size_t got = 0;
+    return a >= 0x10000 && (a >> 47) == 0 &&
+           vm_read_overwrite(mach_task_self(), (vm_address_t)a, n,
+                             (vm_address_t)(uintptr_t)out, &got) == KERN_SUCCESS && got == n;
+#else
     mach_vm_size_t got = 0;
     return a >= 0x10000 && (a >> 47) == 0 &&
            mach_vm_read_overwrite(mach_task_self(), a, n, (mach_vm_address_t)(uintptr_t)out, &got) == KERN_SUCCESS && got == n;
+#endif
 }
 static uint64_t ui_q(uint64_t a) { uint64_t v = 0; return ui_rd(a, &v, 8) ? v : 0; }
 
@@ -954,6 +963,7 @@ static void write_all(int fd, const void *p, size_t n) {
 
 /* Fill probe[] with the rva of every row: a child starts a runtime to read the export tables
  * (the probes must be in the module table that the run's own rt_init is given). */
+#ifndef RT_EMBEDDED_APP
 static void resolve_probes(void) {
     int fd[2];
     if (pipe(fd) != 0) { perror("pipe"); exit(2); }
@@ -1017,6 +1027,7 @@ static void resolve_probes(void) {
         exit(2);
     }
 }
+#endif
 
 /* A copy of the module table in which every probe's row of its module's lifted function table
  * is the probe.  A probe of a module that is not in the table, or at an rva where no function
@@ -1099,7 +1110,11 @@ static RtModule *load_named(Ctx *ctx, const char *name) {
     RtModule *m = rt_module_load(ctx, w, 0);
     if (!m) {
         fprintf(stderr, "gate3 run: %s did not load, last error %u (%s)\n", name, rt_thread_get_last_error(),
+#ifdef RT_EMBEDDED_APP
+                "see numeric runtime error");
+#else
                 gate2_error_name(rt_thread_get_last_error()));
+#endif
         rt_log_flush();
         _exit(1);
     }
@@ -1826,9 +1841,54 @@ int gate3_mode_summary(const char *log_path, const char *report_path) {
     return 0;
 }
 
+/* THE MENU MARK and GATE3_CONSOLE: probes by rva, so the embedded app (which cannot fork to
+ * look exports up) adds them too. */
+static void run_add_mark_probes(void) {
+    /* THE MENU MARK (the comment at the top): the two natives, in every run.  One that
+     * GATE3_PROBE named already is that probe, with the mark added. */
+    static const struct { uint32_t rva; const char *label; } menus[] = { { RUN_MENU_OPEN_RVA, "OpenMenu" }, { RUN_MENU_CLOSE_RVA, "CloseMenu" } };
+    for (unsigned i = 0; i < sizeof menus / sizeof *menus; i++) {
+        unsigned k = 0;
+        while (k < nprobe && !(probe[k].rva == menus[i].rva && !strcmp(probe[k].module, RUN_MENU_MODULE))) k++;
+        if (k == nprobe) {
+            if (nprobe == RUN_MAX_PROBES) { fprintf(stderr, "gate3 run: no room for the menu mark's probes: GATE3_PROBE has too many items\n"); exit(2); }
+            RunProbe p = { .rva = menus[i].rva };
+            snprintf(p.module, sizeof p.module, "%s", RUN_MENU_MODULE);
+            snprintf(p.what, sizeof p.what, "the menu mark");
+            probe[nprobe++] = p;
+        }
+        probe[k].flags = PF_SCRIPT | PF_MENU;
+        snprintf(probe_label[k], sizeof probe_label[0], "%s", menus[i].label);
+    }
+    /* GATE3_CONSOLE (the comment above run_console_tick): the command, and the `!` probe it is handed over in. */
+    const char *con = getenv("GATE3_CONSOLE");
+    if (con && *con) {
+        char *colon = NULL;
+        run_console_after_s = strtod(con, &colon);
+        if (colon == con || !colon || *colon != ':' || !colon[1] || run_console_after_s < 0 || strlen(colon + 1) > sizeof run_console_text - 2) {
+            fprintf(stderr, "gate3 run: GATE3_CONSOLE is <seconds after the main menu>:<command>, the command at most %zu characters: %s\n",
+                    sizeof run_console_text - 2, con);
+            exit(2);
+        }
+        snprintf(run_console_text, sizeof run_console_text, "%s\n", colon + 1);
+        atomic_store(&run_console_state, 1);
+        unsigned k = 0;
+        while (k < nprobe && !(probe[k].rva == RUN_TICK_RVA && !strcmp(probe[k].module, RUN_TICK_MODULE))) k++;
+        if (k == nprobe) {
+            if (nprobe == RUN_MAX_PROBES) { fprintf(stderr, "gate3 run: no room for GATE3_CONSOLE's probe: GATE3_PROBE has too many items\n"); exit(2); }
+            RunProbe p = { .rva = RUN_TICK_RVA };
+            snprintf(p.module, sizeof p.module, "%s", RUN_TICK_MODULE);
+            snprintf(p.what, sizeof p.what, "GATE3_CONSOLE");
+            probe[nprobe++] = p;
+        }
+        probe[k].flags = PF_TICK;
+    }
+}
+
 /* ---- the mode ------------------------------------------------------------------------------------------ */
 
 /* The guest's run on its host thread (run_here): everything from run_child to the end of the run. */
+#ifndef RT_EMBEDDED_APP
 struct guest_host_args { const RtModuleDef *defs; int gargc; char **gargv; const char *log_path; };
 
 static void *run_guest_host_thread(void *arg) {
@@ -1895,45 +1955,7 @@ static int run_here(int gargc, char **gargv, const char *log_path, unsigned time
             probe[nprobe++] = p;
         }
     }
-    /* THE MENU MARK (the comment at the top): the two natives, in every run.  One that
-     * GATE3_PROBE named already is that probe, with the mark added. */
-    static const struct { uint32_t rva; const char *label; } menus[] = { { RUN_MENU_OPEN_RVA, "OpenMenu" }, { RUN_MENU_CLOSE_RVA, "CloseMenu" } };
-    for (unsigned i = 0; i < sizeof menus / sizeof *menus; i++) {
-        unsigned k = 0;
-        while (k < nprobe && !(probe[k].rva == menus[i].rva && !strcmp(probe[k].module, RUN_MENU_MODULE))) k++;
-        if (k == nprobe) {
-            if (nprobe == RUN_MAX_PROBES) { fprintf(stderr, "gate3 run: no room for the menu mark's probes: GATE3_PROBE has too many items\n"); exit(2); }
-            RunProbe p = { .rva = menus[i].rva };
-            snprintf(p.module, sizeof p.module, "%s", RUN_MENU_MODULE);
-            snprintf(p.what, sizeof p.what, "the menu mark");
-            probe[nprobe++] = p;
-        }
-        probe[k].flags = PF_SCRIPT | PF_MENU;
-        snprintf(probe_label[k], sizeof probe_label[0], "%s", menus[i].label);
-    }
-    /* GATE3_CONSOLE (the comment above run_console_tick): the command, and the `!` probe it is handed over in. */
-    const char *con = getenv("GATE3_CONSOLE");
-    if (con && *con) {
-        char *colon = NULL;
-        run_console_after_s = strtod(con, &colon);
-        if (colon == con || !colon || *colon != ':' || !colon[1] || run_console_after_s < 0 || strlen(colon + 1) > sizeof run_console_text - 2) {
-            fprintf(stderr, "gate3 run: GATE3_CONSOLE is <seconds after the main menu>:<command>, the command at most %zu characters: %s\n",
-                    sizeof run_console_text - 2, con);
-            exit(2);
-        }
-        snprintf(run_console_text, sizeof run_console_text, "%s\n", colon + 1);
-        atomic_store(&run_console_state, 1);
-        unsigned k = 0;
-        while (k < nprobe && !(probe[k].rva == RUN_TICK_RVA && !strcmp(probe[k].module, RUN_TICK_MODULE))) k++;
-        if (k == nprobe) {
-            if (nprobe == RUN_MAX_PROBES) { fprintf(stderr, "gate3 run: no room for GATE3_CONSOLE's probe: GATE3_PROBE has too many items\n"); exit(2); }
-            RunProbe p = { .rva = RUN_TICK_RVA };
-            snprintf(p.module, sizeof p.module, "%s", RUN_TICK_MODULE);
-            snprintf(p.what, sizeof p.what, "GATE3_CONSOLE");
-            probe[nprobe++] = p;
-        }
-        probe[k].flags = PF_TICK;
-    }
+    run_add_mark_probes();
     const RtModuleDef *defs = wrap_probes();
     printf("gate3 run: %u probes; log %s; time limit %u s%s%s\n", nprobe, log_path, timeout_s,
            run_status_fd >= 0 ? "" : "; in the driver's own process",
@@ -2226,3 +2248,28 @@ int gate3_mode_run(int argc, char **argv) {
     if (keep && *keep && !(kept_ok && clean)) return 1;             /* a state was asked for and there is none */
     return run_state.returned || by_presents || closed_ok ? 0 : 1;
 }
+#else
+/* UIKit owns the main loop and starts this entry on its own guest worker.
+ * Keep the same offline SDK stand-ins and pre-load fence as the desktop driver.
+ * The caller owns app-private state and logs; no fork, exec, timeout or synthetic
+ * readback is introduced. Diagnostic probes needing a separate process are off. */
+int gate3_run_embedded(int argc, char **argv) {
+    if (pthread_main_np()) {
+        fprintf(stderr, "gate3 embedded: launch on a guest worker, not the UI thread\n");
+        return 2;
+    }
+    if (!getenv("GATE3_ROOT") || !getenv("GATE3_STATE") || !getenv("RT_LOG_FILE")) {
+        fprintf(stderr, "gate3 embedded: app-private game, state and log paths are required\n");
+        return 2;
+    }
+    setenv("RT_TSO", "off", 1); /* The iOS lifted objects use software ordering. */
+    setenv("RT_LOG", "all:info", 0);
+    setenv("RT_D3D_READBACK", "stop", 1);
+    run_add_mark_probes();
+    run_child(wrap_probes(), argc, argv);
+    return run_state.result;
+}
+unsigned long long gate3_embedded_presents(void) {
+    return atomic_load(&run_presents_seen);
+}
+#endif

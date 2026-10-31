@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "rt/test.h"
+#include "rt/gamepad.h"
 
 TEST(xinput1_3, XInputGetCapabilities)
 {
@@ -28,6 +29,23 @@ TEST(xinput1_3, XInputGetCapabilities)
     CALL(kernel32, SetLastError, 0x1234);
     T_EQ(CALL(xinput1_3, XInputGetCapabilities, 0, 1, box.s), 1167);
     T_EQ(T_LAST_ERROR(), 0x1234);
+
+    T_CASE("connected controller exposes supported inputs without rumble");
+    RtGamepad pad={0};
+    rt_gamepad_publish(0, &pad);
+    T_EQ(CALL(xinput1_3, XInputGetCapabilities, 0, 1, box.s), 0);
+    RtGamepadCapabilities caps;
+    memcpy(&caps, box.s, sizeof caps);
+    T_EQ(caps.type, 1); T_EQ(caps.subtype, 1); T_EQ(caps.flags, 0);
+    T_EQ(caps.gamepad.buttons, 0xf3ff);
+    T_EQ(caps.gamepad.left_trigger, 255);
+    T_EQ(caps.gamepad.left_x, 32767);
+    T_EQ(caps.vibration.left_motor, 0); T_EQ(caps.vibration.right_motor, 0);
+    T_EQ(T_LAST_ERROR(), 0x1234);
+    for (i = sizeof caps; i < sizeof box.s; i++) T_EQ(box.s[i], 0xa5);
+    for (i = 0; i < 8; i++) { T_EQ(box.pre[i], 0xa5); T_EQ(box.post[i], 0xa5); }
+    rt_gamepad_disconnect(0);
+    memset(&box, 0xa5, sizeof box);
 
     T_CASE("the flag XINPUT_FLAG_GAMEPAD (1), as the game passes it, changes nothing");
     T_EQ(CALL(xinput1_3, XInputGetCapabilities, 0, 0, box.s), 1167);

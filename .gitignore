@@ -36,6 +36,7 @@ harness/out/
 # Xcode per-user state
 xcuserdata/
 *.xcworkspace/
+/tools/ios/*/*.xcodeproj/
 
 # Compiled experiment binaries
 experiments/afp/afp_probe

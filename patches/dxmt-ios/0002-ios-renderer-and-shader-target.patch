@@ -1,0 +1,512 @@
+diff --git a/include/native/dxmt_native_display.h b/include/native/dxmt_native_display.h
+new file mode 100644
+index 0000000..d3b0fe6
+--- /dev/null
++++ b/include/native/dxmt_native_display.h
+@@ -0,0 +1,21 @@
++#ifndef DXMT_NATIVE_DISPLAY_H
++#define DXMT_NATIVE_DISPLAY_H
++#include <stdint.h>
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* iOS has no global desktop modes. The host publishes its actual drawable
++ * dimensions and screen refresh rate before starting the game, and on resize.
++ * Queries are thread-safe and never dispatch synchronously into UIKit. */
++struct DXMTNativeDisplay {
++  uint32_t width, height;
++  uint32_t refresh_numerator, refresh_denominator;
++};
++int DXMTSetNativeDisplay(const struct DXMTNativeDisplay *display);
++int DXMTGetNativeDisplay(struct DXMTNativeDisplay *display);
++
++#ifdef __cplusplus
++}
++#endif
++#endif
+diff --git a/meson.build b/meson.build
+index e10c901..b0efe20 100644
+--- a/meson.build
++++ b/meson.build
+@@ -7,7 +7,11 @@ project('dxmt', ['c', 'cpp'], version : 'v0.1', meson_version: '>=1.3.0', defaul
+ 
+ fs = import('fs')
+ 
+-dxmt_crossbuild = meson.is_cross_build()
++dxmt_ios = get_option('native_apple_platform') == 'ios'
++# The legacy crossbuild branch is the Windows/Wine ABI, not an Apple SDK cross build.
++dxmt_crossbuild = meson.is_cross_build() and not dxmt_ios
++metal_sdk = dxmt_ios ? 'iphoneos' : 'macosx'
++metal_air_target = dxmt_ios ? 'air64-apple-ios18.0' : 'air64-apple-macos14.0'
+ 
+ cpp = meson.get_compiler('cpp')
+ cc = meson.get_compiler('c')
+@@ -116,12 +120,13 @@ xcrun = find_program('xcrun')
+ 
+ metalir_generator = generator(xcrun,
+   output    : [ '@BASENAME@.air'],
+-  arguments : [ '-sdk', 'macosx', 'metal', '-o', '@OUTPUT@', '-c', '@INPUT@', '@EXTRA_ARGS@'],
++  arguments : [ '-sdk', metal_sdk, 'metal', '-o', '@OUTPUT@', '-c', '@INPUT@'] +
++      (dxmt_ios ? ['--target=' + metal_air_target] : []) + ['@EXTRA_ARGS@'],
+ )
+ 
+ metallib_generator = generator(xcrun,
+   output    : [ '@BASENAME@.metallib'],
+-  arguments : [ '-sdk', 'macosx', 'metallib', '-o', '@OUTPUT@', '@INPUT@'],
++  arguments : [ '-sdk', metal_sdk, 'metallib', '-o', '@OUTPUT@', '@INPUT@'],
+ )
+ 
+ xxd = find_program('xxd')
+@@ -138,6 +143,9 @@ add_project_arguments('-DDXMT_DEBUG=1', language: 'cpp')
+ endif
+ 
+ add_project_arguments('-DDXMT_PAGE_SIZE=4096', language: 'cpp')
++if dxmt_ios
++  add_project_arguments('-DDXMT_IOS=1', language: ['c', 'cpp'])
++endif
+ 
+ dxmt_version = vcs_tag(
+   command: ['git', 'describe', '--always'],
+diff --git a/meson.options b/meson.options
+index 715b176..ee2f311 100644
+--- a/meson.options
++++ b/meson.options
+@@ -1,4 +1,6 @@
+ option('native_llvm_path', type : 'string', value: '/usr/local/opt/llvm@15')
++option('native_llvm_source_include', type : 'string', value: '')
++option('native_apple_platform', type : 'combo', choices: ['macos', 'ios'], value: 'macos')
+ option('build_airconv_for_windows', type : 'boolean', value : false)
+ option('dxmt_debug', type : 'boolean', value : false)
+ option('dxmt_native', type : 'boolean', value : false, deprecated : true)
+@@ -8,4 +10,4 @@ option('wine_builtin_dll', type : 'boolean', value : true)
+ option('enable_tests', type : 'boolean', value : false)
+ option('enable_nvapi', type : 'boolean', value : false)
+ option('enable_nvngx', type : 'boolean', value : false)
+-option('enable_d3d12', type : 'boolean', value : false)
+\ No newline at end of file
++option('enable_d3d12', type : 'boolean', value : false)
+diff --git a/src/airconv/airconv_context.cpp b/src/airconv/airconv_context.cpp
+index de4af55..0d1a639 100644
+--- a/src/airconv/airconv_context.cpp
++++ b/src/airconv/airconv_context.cpp
+@@ -40,14 +40,22 @@ namespace dxmt {
+ 
+ void initializeModule(llvm::Module &M) {
+   M.setSourceFileName("airconv_generated.metal");
++#ifdef DXMT_IOS
++  M.setTargetTriple("air64-apple-ios18.0.0");
++#else
+   M.setTargetTriple("air64-apple-macosx14.0.0");
++#endif
+   M.setDataLayout(
+     "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:"
+     "64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:128-"
+     "v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:1024-n8:"
+     "16:32"
+   );
++#ifdef DXMT_IOS
++  M.setSDKVersion(VersionTuple(18, 0));
++#else
+   M.setSDKVersion(VersionTuple(15, 0));
++#endif
+   M.addModuleFlag(Module::ModFlagBehavior::Error, "wchar_size", 4);
+   M.addModuleFlag(Module::ModFlagBehavior::Max, "frame-pointer", 2);
+   M.addModuleFlag(Module::ModFlagBehavior::Max, "air.max_device_buffers", 31);
+@@ -219,4 +227,4 @@ linkTessellation(llvm::Module &M) {
+   linkShader(M, air_tessellation);
+ }
+ 
+-} // namespace dxmt
+\ No newline at end of file
++} // namespace dxmt
+diff --git a/src/airconv/darwin/meson.build b/src/airconv/darwin/meson.build
+index 2843968..1e21428 100644
+--- a/src/airconv/darwin/meson.build
++++ b/src/airconv/darwin/meson.build
+@@ -9,10 +9,18 @@ else
+   llvm_include_path_darwin = include_directories(join_paths(native_llvm_path, 'include'))
+ endif
+ 
++llvm_source_include = get_option('native_llvm_source_include')
++if llvm_source_include != ''
++  llvm_include_path_darwin = [llvm_include_path_darwin, include_directories(llvm_source_include)]
++endif
++
+ llvm_ld_flags_darwin = [
+   '-L'+join_paths(native_llvm_path, 'lib'),
+-  '-lm', '-lz', '-lcurses', '-lxml2'
++  '-lm'
+ ]
++if not dxmt_ios
++  llvm_ld_flags_darwin += ['-lz', '-lcurses', '-lxml2']
++endif
+ 
+ if native_llvm_path.startswith('/usr/local/opt') or native_llvm_path.startswith('/opt/homebrew/opt')
+   homebrew_prefix = native_llvm_path.startswith('/opt/homebrew/opt') ? '/opt/homebrew' : '/usr/local'
+@@ -36,10 +44,12 @@ airconv_dep_darwin = declare_dependency(
+   link_args           : [ llvm_ld_flags_darwin, llvm_deps ] # meh
+ )
+ 
++if not dxmt_ios
+ executable('airconv', airconv_src + airconv_cli_src,
+   include_directories : [ dxmt_include_path, llvm_include_path_darwin ],
+   cpp_args            : [ airconv_args ],
+   dependencies        : [ dxbc_parser_native_dep ],
+   link_args           : [ llvm_ld_flags_darwin, llvm_deps ],
+   native              : dxmt_crossbuild
+-)
+\ No newline at end of file
++)
++endif
+diff --git a/src/airconv/dxbc_converter.cpp b/src/airconv/dxbc_converter.cpp
+index b0704ac..0a2484b 100644
+--- a/src/airconv/dxbc_converter.cpp
++++ b/src/airconv/dxbc_converter.cpp
+@@ -219,7 +219,11 @@ void setup_metal_version(llvm::Module &module, SM50_SHADER_METAL_VERSION metal_v
+     airLangVersion->addOperand(MDTuple::get(
+         context, {createString("Metal"), createUnsignedInteger(3), createUnsignedInteger(2), createUnsignedInteger(0)}
+     ));
++#ifdef DXMT_IOS
++    module.setTargetTriple("air64-apple-ios18.0.0");
++#else
+     module.setTargetTriple("air64-apple-macosx15.0.0");
++#endif
+     break;
+   }
+   default: {
+diff --git a/src/airconv/meson.build b/src/airconv/meson.build
+index 8e0c8be..d7c503f 100644
+--- a/src/airconv/meson.build
++++ b/src/airconv/meson.build
+@@ -70,7 +70,7 @@ airconv_shaders = [
+ 
+ airconv_shaders_ir = metalir_generator.process(
+   airconv_shaders,
+-  extra_args: ['-std=metal3.1', '--target=air64-apple-macos14.0'],
++  extra_args: ['-std=metal3.1', '--target=' + metal_air_target],
+ )
+ airconv_shaders_header = hexdump_generator.process(airconv_shaders_ir)
+ 
+@@ -108,4 +108,4 @@ endif
+ 
+ if cpu_family == 'x86_64' or cpu_family == 'aarch64' or not dxmt_crossbuild
+   subdir('darwin')
+-endif
+\ No newline at end of file
++endif
+diff --git a/src/airconv/metallib_writer.cpp b/src/airconv/metallib_writer.cpp
+index 3424b51..841f102 100644
+--- a/src/airconv/metallib_writer.cpp
++++ b/src/airconv/metallib_writer.cpp
+@@ -391,12 +391,22 @@ void MetallibWriter::Write(const llvm::Module &module, raw_ostream &OS) {
+   header.BitcodeSize = bitcode.size();
+ 
+   header.Type = FileType::MTLBType_Executable; // executable
++#ifdef DXMT_IOS
++  // Matches Apple's iOS 18-targeted metallib header, verified with the Metal toolchain.
++  header.Platform = Platform::MTLBPlatform_iOS;
++  header.VersionMajor = 2;
++  header.VersionMinor = 8;
++  header.OS = OS::MTLBOS_iOS;
++  header.OSVersionMajor = 18;
++  header.OSVersionMinor = 0;
++#else
+   header.Platform = Platform::MTLBPlatform_macOS;
+   header.VersionMajor = 2;
+   header.VersionMinor = 7;
+   header.OS = OS::MTLBOS_macOS;
+   header.OSVersionMajor = 14;
+   header.OSVersionMinor = 4;
++#endif
+ 
+   // write to stream
+   OS << value(header);
+@@ -409,4 +419,4 @@ void MetallibWriter::Write(const llvm::Module &module, raw_ostream &OS) {
+   OS << bitcode;
+ }
+ 
+-} // namespace dxmt::metallib
+\ No newline at end of file
++} // namespace dxmt::metallib
+diff --git a/src/airconv/metallib_writer.hpp b/src/airconv/metallib_writer.hpp
+index e51a29d..e328064 100644
+--- a/src/airconv/metallib_writer.hpp
++++ b/src/airconv/metallib_writer.hpp
+@@ -25,7 +25,7 @@ enum class MTLBFourCC : uint32_t {
+ 
+ const uint32_t MTLB_Magic = MTLB_FOURCC('M', 'T', 'L', 'B');
+ 
+-enum class Platform : uint16_t { MTLBPlatform_macOS = 0x8001 };
++enum class Platform : uint16_t { MTLBPlatform_macOS = 0x8001, MTLBPlatform_iOS = 0x0001 };
+ 
+ enum class FileType : uint8_t {
+   MTLBType_Executable = 0x00,
+@@ -33,6 +33,7 @@ enum class FileType : uint8_t {
+ 
+ enum class OS : uint8_t {
+   MTLBOS_macOS = 0x81,
++  MTLBOS_iOS = 0x82,
+ };
+ 
+ typedef struct __attribute__((packed)) {
+@@ -120,4 +121,4 @@ public:
+   void Write(const llvm::Module &module, llvm::raw_ostream &OS);
+ };
+ 
+-} // namespace dxmt::metallib
+\ No newline at end of file
++} // namespace dxmt::metallib
+diff --git a/src/d3d10/meson.build b/src/d3d10/meson.build
+index f0bdbe8..aecf20d 100644
+--- a/src/d3d10/meson.build
++++ b/src/d3d10/meson.build
+@@ -4,7 +4,7 @@ d3d10core_src = [
+   'd3d10core.cpp',
+ ]
+ 
+-d3d10_ld_args      = ['-L' + windows_native_install_dir] # a nice trick to force relink
++d3d10_ld_args      = windows_native_install_dir == '' ? [] : ['-L' + windows_native_install_dir]
+ d3d10_link_depends = []
+ 
+ d3d10core_dll = shared_library('d3d10core', d3d10core_src, d3d10core_res,
+diff --git a/src/d3d11/meson.build b/src/d3d11/meson.build
+index 352b6fc..6f79e8a 100644
+--- a/src/d3d11/meson.build
++++ b/src/d3d11/meson.build
+@@ -38,7 +38,7 @@ d3d10_src = [
+   '../d3d10/d3d10_view.cpp',
+ ]
+ 
+-d3d11_ld_args      = ['-L' + windows_native_install_dir] # a nice trick to force relink
++d3d11_ld_args      = windows_native_install_dir == '' ? [] : ['-L' + windows_native_install_dir]
+ d3d11_link_depends = []
+ 
+ d3d11_dll = shared_library('d3d11', d3d11_src, d3d10_src, d3d11_res,
+diff --git a/src/dxgi/meson.build b/src/dxgi/meson.build
+index e966f00..9a761a7 100644
+--- a/src/dxgi/meson.build
++++ b/src/dxgi/meson.build
+@@ -8,7 +8,7 @@ dxgi_src = [
+   'dxgi.cpp',
+ ]
+ 
+-dxgi_ld_args      = ['-L' + windows_native_install_dir] # a nice trick to force relink
++dxgi_ld_args      = windows_native_install_dir == '' ? [] : ['-L' + windows_native_install_dir]
+ dxgi_link_depends = []
+ 
+ dxgi_dll = shared_library('dxgi', dxgi_src, dxgi_res,
+diff --git a/src/nativemetal/meson.build b/src/nativemetal/meson.build
+index 8f0b1a7..f95b7dd 100644
+--- a/src/nativemetal/meson.build
++++ b/src/nativemetal/meson.build
+@@ -3,6 +3,7 @@ winemetal_src = [
+   '../winemetal/unix/winemetal_unix.c',
+   '../winemetal/unix/cache.c',
+   'host_hooks.c',
++  'native_display.c',
+ ]
+ winemetal_link_depends = []
+ 
+@@ -10,9 +11,13 @@ winemetal_ld_args = [
+   '-weak_framework', 'CoreFoundation', '-weak_framework', 'Metal',
+   '-framework', 'MetalFX', '-weak_framework', 'Foundation',
+   '-weak_framework', 'CoreGraphics', '-weak_framework', 'QuartzCore',
+-  '-weak_framework', 'ColorSync',   '-weak_framework', 'Cocoa',
+   '-lsqlite3',
+ ]
++if dxmt_ios
++  winemetal_ld_args += ['-framework', 'UIKit']
++else
++  winemetal_ld_args += ['-weak_framework', 'ColorSync', '-weak_framework', 'Cocoa']
++endif
+ 
+ winemetal_dll = shared_library('winemetal', winemetal_src,
+   name_prefix         : '',
+diff --git a/src/nativemetal/native_display.c b/src/nativemetal/native_display.c
+new file mode 100644
+index 0000000..3733ac4
+--- /dev/null
++++ b/src/nativemetal/native_display.c
+@@ -0,0 +1,25 @@
++#include "native/dxmt_native_display.h"
++#include <limits.h>
++#include <pthread.h>
++
++static pthread_mutex_t display_lock = PTHREAD_MUTEX_INITIALIZER;
++static struct DXMTNativeDisplay current_display;
++
++int DXMTSetNativeDisplay(const struct DXMTNativeDisplay *display) {
++  if (!display || !display->width || !display->height ||
++      display->width > INT_MAX || display->height > INT_MAX ||
++      !display->refresh_numerator || !display->refresh_denominator)
++    return 0;
++  pthread_mutex_lock(&display_lock);
++  current_display = *display;
++  pthread_mutex_unlock(&display_lock);
++  return 1;
++}
++
++int DXMTGetNativeDisplay(struct DXMTNativeDisplay *display) {
++  if (!display) return 0;
++  pthread_mutex_lock(&display_lock);
++  *display = current_display;
++  pthread_mutex_unlock(&display_lock);
++  return display->width && display->height;
++}
+diff --git a/src/util/meson.build b/src/util/meson.build
+index ed78980..9e24c4b 100644
+--- a/src/util/meson.build
++++ b/src/util/meson.build
+@@ -27,8 +27,12 @@ util_src = files([
+ util_deps = []
+ 
+ if not dxmt_crossbuild
++  if dxmt_ios
++    util_src += files('wsi_monitor_ios.cpp')
++  else
++    util_src += files('wsi_monitor_headless.cpp')
++  endif
+   util_src += files([
+-    'wsi_monitor_headless.cpp',
+     'wsi_window_headless.cpp',
+     'wsi_platform_darwin.cpp',
+   ])
+diff --git a/src/util/wsi_monitor_ios.cpp b/src/util/wsi_monitor_ios.cpp
+new file mode 100644
+index 0000000..c8b7e0a
+--- /dev/null
++++ b/src/util/wsi_monitor_ios.cpp
+@@ -0,0 +1,46 @@
++#include "wsi_monitor.hpp"
++#include "native/dxmt_native_display.h"
++#include <cwchar>
++
++namespace dxmt::wsi {
++
++static HMONITOR appMonitor() { return reinterpret_cast<HMONITOR>(uintptr_t(1)); }
++static bool readDisplay(HMONITOR monitor, DXMTNativeDisplay &display) {
++  return monitor == appMonitor() && DXMTGetNativeDisplay(&display);
++}
++
++HMONITOR enumMonitors(uint32_t index) {
++  DXMTNativeDisplay display{};
++  return index == 0 && DXMTGetNativeDisplay(&display) ? appMonitor() : nullptr;
++}
++HMONITOR getDefaultMonitor() { return enumMonitors(0); }
++
++bool getDisplayName(HMONITOR monitor, WCHAR (&name)[32]) {
++  DXMTNativeDisplay display{};
++  if (!readDisplay(monitor, display)) return false;
++  std::swprintf(name, 32, L"\\\\.\\DISPLAY1");
++  return true;
++}
++
++bool getDesktopCoordinates(HMONITOR monitor, RECT *rect) {
++  DXMTNativeDisplay display{};
++  if (!rect || !readDisplay(monitor, display)) return false;
++  *rect = {0, 0, LONG(display.width), LONG(display.height)};
++  return true;
++}
++
++bool getCurrentDisplayMode(HMONITOR monitor, WsiMode *mode) {
++  DXMTNativeDisplay display{};
++  if (!mode || !readDisplay(monitor, display)) return false;
++  *mode = {display.width, display.height,
++           {display.refresh_numerator, display.refresh_denominator}, 32, false};
++  return true;
++}
++bool getDesktopDisplayMode(HMONITOR monitor, WsiMode *mode) {
++  return getCurrentDisplayMode(monitor, mode);
++}
++bool getDisplayMode(HMONITOR monitor, uint32_t index, WsiMode *mode) {
++  return index == 0 && getCurrentDisplayMode(monitor, mode);
++}
++
++} // namespace dxmt::wsi
+diff --git a/src/winemetal/unix/winemetal_unix.c b/src/winemetal/unix/winemetal_unix.c
+index 0a9e4a1..820bfff 100644
+--- a/src/winemetal/unix/winemetal_unix.c
++++ b/src/winemetal/unix/winemetal_unix.c
+@@ -433,6 +433,19 @@ _MTLCommandBuffer_encodeSignalEvent(void *obj) {
+   return STATUS_SUCCESS;
+ }
+ 
++/* Managed storage is a macOS CPU/GPU synchronization model. On iOS the
++ * equivalent CPU-visible allocation is coherent shared memory. Keep cache and
++ * hazard-tracking flags, and apply the same mapping to heap size queries. */
++static MTLResourceOptions
++native_resource_options(uint64_t raw) {
++  MTLResourceOptions options = (MTLResourceOptions)raw;
++#if !TARGET_OS_OSX
++  if ((options & MTLResourceStorageModeMask) == WMTResourceStorageModeManaged)
++    options = (options & ~MTLResourceStorageModeMask) | MTLResourceStorageModeShared;
++#endif
++  return options;
++}
++
+ static NTSTATUS
+ _MTLDevice_newBuffer(void *obj) {
+   struct unixcall_mtldevice_newbuffer *params = obj;
+@@ -442,10 +455,10 @@ _MTLDevice_newBuffer(void *obj) {
+   if (info->memory.ptr) {
+     buffer = [device newBufferWithBytesNoCopy:info->memory.ptr
+                                        length:info->length
+-                                      options:(enum MTLResourceOptions)info->options
++                                      options:native_resource_options(info->options)
+                                   deallocator:NULL];
+   } else {
+-    buffer = [device newBufferWithLength:info->length options:(enum MTLResourceOptions)info->options];
++    buffer = [device newBufferWithLength:info->length options:native_resource_options(info->options)];
+     info->memory.ptr = [buffer storageMode] == MTLStorageModePrivate ? NULL : [buffer contents];
+   }
+   params->ret = (obj_handle_t)buffer;
+@@ -536,7 +549,7 @@ fill_texture_descriptor(MTLTextureDescriptor *desc, struct WMTTextureInfo *info)
+   desc.mipmapLevelCount = info->mipmap_level_count;
+   desc.sampleCount = info->sample_count;
+   desc.usage = (MTLTextureUsage)info->usage;
+-  desc.resourceOptions = (MTLResourceOptions)info->options;
++  desc.resourceOptions = native_resource_options(info->options);
+ };
+ 
+ void
+@@ -3506,7 +3519,7 @@ _MTLDevice_newHeap(void *obj) {
+   id<MTLDevice> device = (id<MTLDevice>)params->device;
+   struct WMTHeapInfo const *info = params->info.ptr;
+   MTLHeapDescriptor *desc = [[MTLHeapDescriptor alloc] init];
+-  desc.resourceOptions = (MTLResourceOptions)info->options;
++  desc.resourceOptions = native_resource_options(info->options);
+   desc.sparsePageSize = (MTLSparsePageSize)info->sparse_page_size;
+   desc.type = (MTLHeapType)info->type;
+   desc.size = info->size;
+@@ -3522,7 +3535,7 @@ _MTLDevice_heapBufferSizeAndAlign(void *obj) {
+   struct unixcall_mtldevice_heapbuffersizeandalign *params = obj;
+   id<MTLDevice> device = (id<MTLDevice>)params->device;
+   MTLSizeAndAlign ret =
+-      [device heapBufferSizeAndAlignWithLength:params->length options:(MTLResourceOptions)params->options];
++      [device heapBufferSizeAndAlignWithLength:params->length options:native_resource_options(params->options)];
+   params->ret_size = ret.size;
+   params->ret_align = ret.align;
+   return STATUS_SUCCESS;
+@@ -3549,10 +3562,10 @@ _MTLHeap_newBuffer(void *obj) {
+   struct WMTBufferInfo *info = params->info.ptr;
+   id<MTLBuffer> buffer;
+   if (~params->offset == 0)
+-    buffer = [heap newBufferWithLength:info->length options:(enum MTLResourceOptions)info->options];
++    buffer = [heap newBufferWithLength:info->length options:native_resource_options(info->options)];
+   else
+     buffer =
+-        [heap newBufferWithLength:info->length options:(enum MTLResourceOptions)info->options offset:params->offset];
++        [heap newBufferWithLength:info->length options:native_resource_options(info->options) offset:params->offset];
+   info->memory.ptr = [heap storageMode] == MTLStorageModePrivate ? NULL : [buffer contents];
+ 
+   params->ret = (obj_handle_t)buffer;
+@@ -3618,7 +3631,7 @@ _MTLDevice_newIndirectCommandBuffer(void *obj) {
+   id<MTLIndirectCommandBuffer> icb =
+       [device newIndirectCommandBufferWithDescriptor:desc
+                                      maxCommandCount:params->max_count
+-                                             options:(MTLResourceOptions)params->options];
++                                             options:native_resource_options(params->options)];
+   params->ret = (obj_handle_t)icb;
+   info->gpu_resource_id = [icb gpuResourceID]._impl;
+   [desc release];

@@ -10,4 +10,10 @@ int gate3_mode_run(int argc, char **argv);
  * what the run wrote to descriptor 2. */
 int gate3_mode_summary(const char *log_path, const char *report_path);
 
+/* Native app build only: caller supplies the UIKit worker and app-private paths. */
+#ifdef RT_EMBEDDED_APP
+int gate3_run_embedded(int argc, char **argv);
+unsigned long long gate3_embedded_presents(void);
+#endif
+
 #endif

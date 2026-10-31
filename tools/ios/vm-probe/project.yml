@@ -1,0 +1,35 @@
+name: TFMemoryProbe
+configs:
+  Baseline: debug
+  Extended: debug
+options:
+  deploymentTarget:
+    iOS: "18.0"
+targets:
+  TFMemoryProbe:
+    type: application
+    platform: iOS
+    sources:
+      - main.m
+      - Probe.c
+      - Probe.h
+    settings:
+      base:
+        TF_BUNDLE_PREFIX: com.example
+        PRODUCT_BUNDLE_IDENTIFIER: $(TF_BUNDLE_PREFIX).titanfall.memoryprobe
+        PRODUCT_NAME: TFMemoryProbe
+        CODE_SIGN_STYLE: Automatic
+        HEADER_SEARCH_PATHS: $(SRCROOT)/../../../runtime/include
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: TF Memory Probe
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GCC_PREPROCESSOR_DEFINITIONS: '$(inherited) TF_PROBE_CONFIGURATION=\"$(CONFIGURATION)\"'
+      configs:
+        Baseline:
+          CODE_SIGN_ENTITLEMENTS: Baseline.entitlements
+        Extended:
+          CODE_SIGN_ENTITLEMENTS: Extended.entitlements

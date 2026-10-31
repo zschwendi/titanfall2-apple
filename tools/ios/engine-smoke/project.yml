@@ -1,0 +1,48 @@
+name: TFEngineSmoke
+options:
+  deploymentTarget:
+    iOS: "18.0"
+targets:
+  TFEngineSmoke:
+    type: application
+    platform: iOS
+    sources:
+      - main.m
+      - EngineCheck.c
+      - EngineCheck.h
+      - path: ../../../build/ios-engine-check/gen/gate2_table.c
+      - path: ../../../build/ios-engine-check/Resources/Game
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - sdk: UIKit.framework
+      - sdk: Foundation.framework
+      - sdk: Metal.framework
+      - sdk: QuartzCore.framework
+      - sdk: CoreGraphics.framework
+      - sdk: GameController.framework
+      - sdk: AudioToolbox.framework
+      - sdk: AVFAudio.framework
+    settings:
+      base:
+        TF_BUNDLE_PREFIX: com.example
+        PRODUCT_BUNDLE_IDENTIFIER: $(TF_BUNDLE_PREFIX).titanfall.enginesmoke
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: ../vm-probe/Extended.entitlements
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: TF Engine Check
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GCC_C_LANGUAGE_STANDARD: gnu17
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/../../../runtime/include
+          - $(SRCROOT)/../../../harness
+          - $(SRCROOT)/../../../build/ios-engine-check/gen
+        GCC_PREPROCESSOR_DEFINITIONS: $(inherited) RT_VM_LAYOUT_IOS=1
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -Wl,-force_load,$(SRCROOT)/../../../build/ios-iphoneos/runtime/librt.a
+          - $(SRCROOT)/../../../build/ios-iphoneos/runtime/lifted/tier0.o
+          - $(SRCROOT)/../../../build/ios-iphoneos/runtime/lifted/vstdlib.o

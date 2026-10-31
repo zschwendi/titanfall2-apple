@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "rt/test.h"
+#include "rt/gamepad.h"
 
 TEST(xinput1_3, XInputGetState)
 {
@@ -28,6 +29,42 @@ TEST(xinput1_3, XInputGetState)
     CALL(kernel32, SetLastError, 0x1234);
     T_EQ(CALL(xinput1_3, XInputGetState, 0, box.s), 1167);
     T_EQ(T_LAST_ERROR(), 0x1234);
+
+    T_CASE("connected controller uses native snapshot");
+    RtGamepad pad = { .buttons=RT_PAD_A | RT_PAD_START | RT_PAD_L3,
+        .left_trigger=255, .right_trigger=128, .left_x=-32768,
+        .left_y=32767, .right_x=1234, .right_y=-2345 };
+    rt_gamepad_publish(0, &pad);
+    T_EQ(CALL(xinput1_3, XInputGetState, 0, box.s), 0);
+    RtGamepadState state;
+    memcpy(&state, box.s, sizeof state);
+    T_TRUE(state.packet != 0);
+    T_EQ(state.gamepad.buttons, 0x1050);
+    T_EQ(state.gamepad.left_x, -32768);
+    T_EQ(state.gamepad.left_y, 32767);
+    T_EQ(state.gamepad.right_trigger, 128);
+    T_EQ(T_LAST_ERROR(), 0x1234);
+    for (i = sizeof state; i < sizeof box.s; i++) T_EQ(box.s[i], 0xa5);
+    for (i = 0; i < 8; i++) { T_EQ(box.pre[i], 0xa5); T_EQ(box.post[i], 0xa5); }
+    uint32_t packet=state.packet;
+    rt_gamepad_publish(0, &pad);
+    T_EQ(CALL(xinput1_3, XInputGetState, 0, &state), 0);
+    T_EQ(state.packet, packet);
+    pad.buttons=0;
+    rt_gamepad_publish(0, &pad);
+    T_EQ(CALL(xinput1_3, XInputGetState, 0, &state), 0);
+    T_TRUE(state.packet != packet);
+    rt_gamepad_disconnect(0);
+    memset(box.s, 0xa5, sizeof box.s);
+    T_EQ(CALL(xinput1_3, XInputGetState, 0, box.s), 1167);
+    for (i = 0; i < sizeof box.s; i++) T_EQ(box.s[i], 0xa5);
+    memset(&pad, 0, sizeof pad);
+    rt_gamepad_publish(0, &pad);
+    T_EQ(CALL(xinput1_3, XInputGetState, 0, &state), 0);
+    T_EQ(state.gamepad.buttons, 0);
+    T_EQ(state.gamepad.left_trigger, 0);
+    T_TRUE(state.packet != packet);
+    rt_gamepad_disconnect(0);
 
     T_TRAPS(CALL(xinput1_3, XInputGetState, 4, box.s), "XInputGetState with user index 4, above 3");
     T_TRAPS(CALL(xinput1_3, XInputGetState, 0, NULL), "XInputGetState with a NULL pState");
